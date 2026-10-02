@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with credit tracking, premium status, and usage metrics",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth user ID"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "credits": {
+          "type": "number",
+          "description": "Available credits for Gemini 3.8 voice generation"
+        },
+        "totalGeneratedChars": {
+          "type": "number",
+          "description": "Total characters synthesized"
+        },
+        "totalTakes": {
+          "type": "number",
+          "description": "Total number of audio takes generated"
+        },
+        "isPremium": {
+          "type": "boolean",
+          "description": "Whether user has unlocked unlimited premium status"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "ISO timestamp of last activity"
+        }
+      },
+      "required": ["id", "email", "credits"]
+    },
+    "VoiceTake": {
+      "title": "VoiceTake",
+      "description": "A synthesized voiceover take saved to user's cloud studio history",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Take unique ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Short script title"
+        },
+        "text": {
+          "type": "string",
+          "description": "Full script dialogue"
+        },
+        "audioUrl": {
+          "type": "string",
+          "description": "Data URL or storage URL of synthesized audio"
+        },
+        "voiceName": {
+          "type": "string",
+          "description": "Actor voice and accent name"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language used (hindi or english)"
+        },
+        "emotionLabel": {
+          "type": "string",
+          "description": "Emotion preset label"
+        },
+        "speed": {
+          "type": "number",
+          "description": "Speech speed rate"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duration in seconds"
+        },
+        "charCount": {
+          "type": "number",
+          "description": "Character count of script"
+        },
+        "creditsUsed": {
+          "type": "number",
+          "description": "Credits consumed for this take"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Unix timestamp in ms"
+        }
+      },
+      "required": ["id", "userId", "text", "voiceName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual user document containing profile and Gemini 3.8 credits"
+    },
+    "/users/{userId}/takes/{takeId}": {
+      "schema": "VoiceTake",
+      "description": "Audio clips and script history saved per user"
+    }
+  }
+}

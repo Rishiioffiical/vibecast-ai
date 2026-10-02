@@ -1,0 +1,7 @@
+{
+  "name": "Vani AI - Hindi Emotional Text to Speech",
+  "description": "Modern AI Text-to-Speech studio specializing in Hindi Male Emotional Voices with speed control and instant audio export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny catch-all prevents any unauthorized reads or writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Role-based Access Control: Verified system admin accounts
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email in ['dubeyrishi135@gmail.com', 'rdpandit913@gmail.com']
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprint for User Profiles
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.email is string && data.email.size() <= 256
+        && data.credits is number && data.credits >= 0 && data.credits <= 10000000
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
+        && (!('isPremium' in data) || (data.isPremium is bool))
+        && (!('totalGeneratedChars' in data) || (data.totalGeneratedChars is number && data.totalGeneratedChars >= 0))
+        && (!('totalTakes' in data) || (data.totalTakes is number && data.totalTakes >= 0))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64))
+        && (!('lastLoginAt' in data) || (data.lastLoginAt is string && data.lastLoginAt.size() <= 64));
+    }
+
+    // Validation Blueprint for Voice Takes
+    function isValidVoiceTake(data, targetUserId) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == targetUserId
+        && data.text is string && data.text.size() <= 10000
+        && (!('title' in data) || (data.title is string && data.title.size() <= 256))
+        && (!('voiceName' in data) || (data.voiceName is string && data.voiceName.size() <= 128))
+        && (!('language' in data) || (data.language is string && data.language.size() <= 32))
+        && (!('emotionLabel' in data) || (data.emotionLabel is string && data.emotionLabel.size() <= 64))
+        && (!('speed' in data) || (data.speed is number && data.speed >= 0.25 && data.speed <= 4.0))
+        && (!('duration' in data) || (data.duration is number && data.duration >= 0))
+        && (!('createdAt' in data) || (data.createdAt is number || data.createdAt is string));
+    }
+
+    // Connection testing endpoint for boot check
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // User Accounts & Quota Protection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      // Create: Normal creators cannot self-assign premium status or credits higher than 2,000 limit
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (isAdmin() || (incoming().isPremium == false && incoming().credits <= 2000));
+
+      // Update: Anti-tamper constraint prevents public creators from arbitrarily boosting credits or setting isPremium
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (isAdmin() || (
+            incoming().isPremium == existing().isPremium
+            && incoming().credits <= existing().credits
+            && incoming().id == existing().id
+          ));
+
+      allow delete: if isOwner(userId) || isAdmin();
+
+      // Audio Takes Subcollection
+      match /takes/{takeId} {
+        allow read: if isOwner(userId) || isAdmin();
+
+        allow create: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(takeId)
+          && isValidVoiceTake(incoming(), userId);
+
+        allow update: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(takeId)
+          && incoming().userId == existing().userId
+          && isValidVoiceTake(incoming(), userId);
+
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}

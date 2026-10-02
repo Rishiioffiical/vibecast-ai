@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #1e241f;
+    background-color: #344638;
+  }
+}
+
+/* Bold Italic & Mashup Typography Classes */
+.font-serif-display {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-fraunces {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.font-syne {
+  font-family: 'Syne', sans-serif;
+}
+
+.font-bold-italic {
+  font-family: 'Fraunces', 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.font-display-mashup {
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-weight: 900;
+}
+
+.font-mono-numbers {
+  font-family: 'Space Grotesk', monospace;
+}
+
+/* Retro Editorial Range Slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: #e8e2d4;
+  height: 8px;
+  border-radius: 9999px;
+  border: 1px solid #d4ccbd;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  background: #b83848;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(184, 56, 72, 0.45);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+input[type="range"]::-moz-range-track {
+  background: #e8e2d4;
+  height: 8px;
+  border-radius: 9999px;
+  border: 1px solid #d4ccbd;
+}
+
+input[type="range"]::-moz-range-thumb {
+  background: #b83848;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(184, 56, 72, 0.45);
+}
+
+/* Architectural Grid Pattern on Sage Green Canvas */
+.canvas-grid {
+  background-color: #344638;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Cream paper card texture and tactile shadow */
+.card-cream {
+  background-color: #faf7ef;
+  border: 1px solid rgba(216, 208, 192, 0.85);
+  box-shadow: 0 20px 45px -10px rgba(15, 26, 18, 0.35), 0 2px 6px rgba(15, 26, 18, 0.1);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #e5ded0;
+}
+::-webkit-scrollbar-thumb {
+  background: #b5ac9b;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b83848;
+}
