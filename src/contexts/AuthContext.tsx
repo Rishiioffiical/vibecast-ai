@@ -34,6 +34,7 @@ export interface UserProfile {
   isPremium: boolean;
   createdAt: string;
   lastLoginAt: string;
+  lastResetDate?: string;
   lastBonusClaimDate?: string;
 }
 
@@ -45,10 +46,10 @@ interface AuthContextType {
   signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
-  quickAdminLogin: (adminEmail?: string) => Promise<void>;
   signOut: () => Promise<void>;
   deductCredits: (charCount: number) => Promise<boolean>;
   claimDailyBonus: () => Promise<number>;
+  resetDailyQuotaManually: () => Promise<boolean>;
   saveTakeToCloud: (take: GeneratedClip) => Promise<void>;
   fetchUserTakes: () => Promise<GeneratedClip[]>;
   deleteTakeFromCloud: (takeId: string) => Promise<void>;
@@ -57,20 +58,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const PUBLIC_SIGNUP_CHAR_LIMIT = 2000; // 2k characters limit for public users
+export const PUBLIC_SIGNUP_CHAR_LIMIT = 2000; // 2k characters daily limit for public creators
 const ADMIN_EMAILS = ['rdpandit913@gmail.com', 'dubeyrishi135@gmail.com'];
+
+export const getLocalDateString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Load or create Firestore user profile
+  // Load or create Firestore user profile with local midnight reset
   const syncUserProfile = async (firebaseUser: User) => {
     try {
       const userRef = doc(db, 'users', firebaseUser.uid);
       const userSnap = await getDoc(userRef);
-      const todayDate = new Date().toISOString().split('T')[0];
+      const todayDate = getLocalDateString();
       const userEmail = (firebaseUser.email || '').trim().toLowerCase();
       const isAdmin = ADMIN_EMAILS.includes(userEmail);
 
@@ -78,15 +87,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = userSnap.data() as UserProfile;
         const isPremiumUser = isAdmin || data.isPremium;
 
-        await updateDoc(userRef, {
+        // Check if user has entered a new day since last reset
+        const isNewDay = !data.lastResetDate || data.lastResetDate !== todayDate;
+        let freshCredits = data.credits;
+
+        if (isAdmin || isPremiumUser) {
+          freshCredits = 999999;
+        } else if (isNewDay) {
+          // Reset daily credits to full allowance (2,000 chars)
+          freshCredits = PUBLIC_SIGNUP_CHAR_LIMIT;
+          console.log(`[Daily Quota Reset] User ${firebaseUser.uid} credits reset to ${PUBLIC_SIGNUP_CHAR_LIMIT} on ${todayDate}`);
+        }
+
+        const updatePayload: Record<string, any> = {
           lastLoginAt: new Date().toISOString(),
           isPremium: isPremiumUser,
-        });
+        };
+
+        if (isNewDay) {
+          updatePayload.credits = freshCredits;
+          updatePayload.lastResetDate = todayDate;
+        }
+
+        await updateDoc(userRef, updatePayload);
 
         const refreshedProfile: UserProfile = {
           ...data,
           isPremium: isPremiumUser,
-          credits: isAdmin ? 999999 : data.credits,
+          credits: freshCredits,
+          lastResetDate: isNewDay ? todayDate : data.lastResetDate,
           lastLoginAt: new Date().toISOString(),
         };
         setUserProfile(refreshedProfile);
@@ -102,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isPremium: isAdmin,
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
+          lastResetDate: todayDate,
           lastBonusClaimDate: todayDate,
         };
         await setDoc(userRef, newProfile);
@@ -111,6 +141,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error syncing user profile:', err);
     }
   };
+
+  // Real-time Midnight watcher: triggers automatic quota reset right at 12:00 AM local time
+  useEffect(() => {
+    let timerId: any;
+    const scheduleMidnightWatcher = () => {
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2);
+      const msUntilMidnight = Math.max(1000, tomorrow.getTime() - now.getTime());
+
+      timerId = setTimeout(async () => {
+        if (auth.currentUser) {
+          await syncUserProfile(auth.currentUser);
+        }
+        scheduleMidnightWatcher();
+      }, msUntilMidnight);
+    };
+
+    scheduleMidnightWatcher();
+    return () => clearTimeout(timerId);
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -153,29 +203,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInAsGuest = async () => {
     const cred = await firebaseSignInAnonymously(auth);
     await syncUserProfile(cred.user);
-  };
-
-  const quickAdminLogin = async (adminEmail: string = 'dubeyrishi135@gmail.com') => {
-    let cred = auth.currentUser;
-    if (!cred) {
-      const res = await firebaseSignInAnonymously(auth);
-      cred = res.user;
-    }
-    const userRef = doc(db, 'users', cred.uid);
-    const adminProfile: UserProfile = {
-      id: cred.uid,
-      email: adminEmail,
-      displayName: 'Studio Admin',
-      credits: 999999,
-      totalGeneratedChars: 0,
-      totalTakes: 0,
-      isPremium: true,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-    };
-    await setDoc(userRef, adminProfile, { merge: true });
-    setUser(cred);
-    setUserProfile(adminProfile);
   };
 
   const signOut = async () => {
@@ -232,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
         credits: newCredits,
-        lastBonusClaimDate: new Date().toISOString().split('T')[0],
+        lastBonusClaimDate: getLocalDateString(),
       });
 
       setUserProfile((prev) => (prev ? { ...prev, credits: newCredits } : null));
@@ -240,6 +267,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error(e);
       return 0;
+    }
+  };
+
+  const resetDailyQuotaManually = async (): Promise<boolean> => {
+    if (!user || !userProfile) return false;
+    const todayDate = getLocalDateString();
+    const userEmail = (user.email || '').trim().toLowerCase();
+    const isAdmin = ADMIN_EMAILS.includes(userEmail);
+
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const targetCredits = isAdmin ? 999999 : PUBLIC_SIGNUP_CHAR_LIMIT;
+
+      await updateDoc(userRef, {
+        credits: targetCredits,
+        lastResetDate: todayDate,
+      });
+
+      setUserProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              credits: targetCredits,
+              lastResetDate: todayDate,
+            }
+          : null
+      );
+      return true;
+    } catch (err) {
+      console.error('Error resetting daily quota manually:', err);
+      return false;
     }
   };
 
@@ -316,10 +374,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUpWithEmail,
         signInWithGoogle,
         signInAsGuest,
-        quickAdminLogin,
         signOut,
         deductCredits,
         claimDailyBonus,
+        resetDailyQuotaManually,
         saveTakeToCloud,
         fetchUserTakes,
         deleteTakeFromCloud,

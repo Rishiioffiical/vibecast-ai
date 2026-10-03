@@ -40,6 +40,14 @@
         "lastLoginAt": {
           "type": "string",
           "description": "ISO timestamp of last activity"
+        },
+        "lastResetDate": {
+          "type": "string",
+          "description": "Date string of last quota reset in YYYY-MM-DD local format"
+        },
+        "lastBonusClaimDate": {
+          "type": "string",
+          "description": "Date string of last claimed daily bonus in YYYY-MM-DD"
         }
       },
       "required": ["id", "email", "credits"]

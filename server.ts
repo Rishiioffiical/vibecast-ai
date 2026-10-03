@@ -83,42 +83,81 @@ const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY || process.env.GEMINI_API_KEY;
 // Cache GoogleGenAI instances by key to avoid re-creation overhead
 const aiClients: Record<string, GoogleGenAI> = {};
 
-function getGeminiClientForRequest(req: Request): {
-  ai: GoogleGenAI | null;
-  role: 'admin' | 'public' | 'unconfigured';
+function getCandidateKeysForRequest(req: Request): {
+  keys: string[];
+  isAdmin: boolean;
   userEmail: string;
 } {
   const rawEmail = (req.headers['x-user-email'] as string) || (req.body && req.body.userEmail) || '';
   const userEmail = rawEmail.trim().toLowerCase();
   const isAdmin = !!(userEmail && ADMIN_EMAILS.includes(userEmail));
 
-  let selectedKey: string | undefined;
-  let role: 'admin' | 'public' | 'unconfigured';
+  // Build candidate keys pool without duplicates
+  const rawPool = isAdmin
+    ? [ADMIN_API_KEY, PUBLIC_API_KEY, process.env.GEMINI_API_KEY]
+    : [PUBLIC_API_KEY, ADMIN_API_KEY, process.env.GEMINI_API_KEY];
 
-  if (isAdmin) {
-    selectedKey = ADMIN_API_KEY || PUBLIC_API_KEY;
-    role = 'admin';
-  } else {
-    selectedKey = PUBLIC_API_KEY || ADMIN_API_KEY;
-    role = 'public';
+  const keys = Array.from(new Set(rawPool.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)));
+
+  return { keys, isAdmin, userEmail };
+}
+
+/**
+ * Executes a Gemini operation with automatic multi-key failover and jitter retry.
+ * If a key encounters 503 (high demand) or 429 (rate limit), it retries and
+ * fails over to alternate keys in the pool.
+ */
+async function runWithKeyFailover<T>(
+  req: Request,
+  operation: (ai: GoogleGenAI, key: string, isPrimary: boolean) => Promise<T>
+): Promise<T> {
+  const { keys } = getCandidateKeysForRequest(req);
+
+  if (keys.length === 0) {
+    throw new Error('Gemini API key is not configured on the server.');
   }
 
-  if (!selectedKey) {
-    return { ai: null, role: 'unconfigured', userEmail };
-  }
+  let lastError: any = null;
 
-  if (!aiClients[selectedKey]) {
-    aiClients[selectedKey] = new GoogleGenAI({
-      apiKey: selectedKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (!aiClients[key]) {
+      aiClients[key] = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
         },
-      },
-    });
+      });
+    }
+
+    // Try up to 2 attempts per key in case of momentary 503 spikes
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        return await operation(aiClients[key], key, i === 0);
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || err?.statusText || err?.code;
+        const isTransient = status === 503 || status === 429 || `${err?.message}`.includes('high demand') || `${err?.message}`.includes('RESOURCE_EXHAUSTED');
+
+        if (isTransient && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 350));
+          continue;
+        }
+
+        console.warn(`[Key Failover] Key #${i + 1} attempt ${attempt} failed: ${err?.message || err} [status: ${status}]. Attempting fallback...`);
+        break;
+      }
+    }
+
+    // Pause briefly before switching to next key
+    if (i < keys.length - 1) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
   }
 
-  return { ai: aiClients[selectedKey], role, userEmail };
+  throw lastError;
 }
 
 // Map emotion, language, and voice persona to detailed speech metadata style description
@@ -177,97 +216,89 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
     const allowedEmotions = ['emotional-deep', 'emotional-dramatic', 'emotional-poetic', 'emotional-melancholy', 'emotional-inspiring'];
     const safeEmotion = allowedEmotions.includes(emotion) ? emotion : 'emotional-deep';
 
-    const { ai, role, userEmail } = getGeminiClientForRequest(req);
-
-    if (!ai) {
-      return res.status(503).json({
-        error: 'Gemini API key is not configured on the server.',
-        code: 'API_KEY_MISSING',
-      });
-    }
-
     const allowedVoices = ['Charon', 'Fenrir', 'Puck', 'Zephyr', 'Kore', 'Aoede'];
     const chosenVoice = allowedVoices.includes(voice) ? voice : 'Charon';
 
     const styleInstruction = buildStylePrompt(chosenVoice, safeEmotion, safeSpeed, language);
 
-    // Call Gemini 3.8 Flash Lite TTS with automatic fallback
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: cleanText,
-                speechMetadata: {
-                  style: styleInstruction,
+    // Call Gemini 3.8 Flash Lite TTS with automatic multi-key failover
+    const result = await runWithKeyFailover(req, async (ai) => {
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: cleanText,
+                  speechMetadata: {
+                    style: styleInstruction,
+                  },
+                },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: chosenVoice,
                 },
               },
-            ],
+            },
           },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: chosenVoice,
+        });
+      } catch (innerErr: any) {
+        console.warn('TTS with speechMetadata failed, retrying with standard text prompt...', innerErr?.message);
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: cleanText,
+                },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: chosenVoice,
+                },
               },
             },
           },
-        },
-      });
-    } catch (innerErr: any) {
-      console.warn('TTS with speechMetadata failed, retrying with standard text prompt...', innerErr?.message);
-      response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: cleanText,
-              },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: chosenVoice,
-              },
-            },
-          },
-        },
-      });
-    }
+        });
+      }
 
-    const candidatePart = response.candidates?.[0]?.content?.parts?.[0];
-    const base64Audio = candidatePart?.inlineData?.data;
+      const candidatePart = response.candidates?.[0]?.content?.parts?.[0];
+      const base64Audio = candidatePart?.inlineData?.data;
 
-    if (!base64Audio) {
-      return res.status(500).json({
-        error: 'The AI model completed the request but did not return audio data.',
-      });
-    }
+      if (!base64Audio) {
+        throw new Error('The AI model completed the request but did not return audio data.');
+      }
 
-    const mimeType = candidatePart?.inlineData?.mimeType || 'audio/wav';
+      const mimeType = candidatePart?.inlineData?.mimeType || 'audio/wav';
+      return { base64Audio, mimeType };
+    });
 
     return res.json({
-      audio: base64Audio,
-      mimeType,
+      audio: result.base64Audio,
+      mimeType: result.mimeType,
       voice: chosenVoice,
-      emotion,
-      speed,
+      emotion: safeEmotion,
+      speed: safeSpeed,
       timestamp: Date.now(),
     });
   } catch (error: any) {
-    console.error('Error in /api/tts:', error);
+    console.error('Error in /api/tts after all key attempts:', error);
     const errorMessage = error?.message || 'Failed to synthesize speech.';
     return res.status(500).json({
       error: errorMessage,
@@ -285,34 +316,30 @@ app.post('/api/transcribe', rateLimiter(20, 60000), async (req: Request, res: Re
       return res.status(400).json({ error: 'Audio data is required for transcription.' });
     }
 
-    const { ai } = getGeminiClientForRequest(req);
-
-    if (!ai) {
-      return res.status(503).json({ error: 'Gemini API key is not configured.' });
-    }
-
     const cleanMime = mimeType.split(';')[0] || 'audio/webm';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-transcribe',
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: cleanMime,
-                data: audio,
+    const transcription = await runWithKeyFailover(req, async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-transcribe',
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMime,
+                  data: audio,
+                },
               },
-            },
-            {
-              text: 'Transcribe this spoken audio accurately into natural Hindi (using Devanagari script). Keep the exact wording and natural emotional flow. Do not add metadata or preamble, just return the transcription.',
-            },
-          ],
-        },
-      ],
+              {
+                text: 'Transcribe this spoken audio accurately into natural Hindi (using Devanagari script). Keep the exact wording and natural emotional flow. Do not add metadata or preamble, just return the transcription.',
+              },
+            ],
+          },
+        ],
+      });
+      return response.text?.trim() || '';
     });
 
-    const transcription = response.text?.trim() || '';
     return res.json({ transcription });
   } catch (error: any) {
     console.error('Error in /api/transcribe:', error);
@@ -322,19 +349,13 @@ app.post('/api/transcribe', rateLimiter(20, 60000), async (req: Request, res: Re
   }
 });
 
-// POST /api/ai/enhance - AI Hindi Script Enhancer & Tone Rewriter using gemini-3.5-flash
+// POST /api/ai/enhance - AI Hindi Script Enhancer & Tone Rewriter using gemini-3.8-flash
 app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Response) => {
   try {
     const { text, type = 'emotional' } = req.body;
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Script text is required.' });
-    }
-
-    const { ai } = getGeminiClientForRequest(req);
-
-    if (!ai) {
-      return res.status(503).json({ error: 'Gemini API key is not configured.' });
     }
 
     const instructions: Record<string, string> = {
@@ -346,27 +367,30 @@ app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Re
 
     const selectedInstruction = instructions[type] || instructions.emotional;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: `${selectedInstruction}\n\nOriginal Text:\n${text}\n\nIMPORTANT: Return ONLY the rewritten Hindi script in clean Devanagari, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`,
-            },
-          ],
+    const result = await runWithKeyFailover(req, async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `${selectedInstruction}\n\nOriginal Text:\n${text}\n\nIMPORTANT: Return ONLY the rewritten Hindi script in clean Devanagari, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction:
+            'You are an award-winning Indian cinematic scriptwriter and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.',
+          temperature: 0.8,
         },
-      ],
-      config: {
-        systemInstruction:
-          'You are an award-winning Indian cinematic scriptwriter and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.',
-        temperature: 0.8,
-      },
+      });
+      return response.text?.trim() || text;
     });
 
     return res.json({
-      result: response.text?.trim() || text,
+      result,
       type,
     });
   } catch (error: any) {
@@ -377,7 +401,7 @@ app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Re
   }
 });
 
-// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-3.5-flash
+// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-3.8-flash
 app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Response) => {
   try {
     const { messages = [] } = req.body;
@@ -386,31 +410,26 @@ app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Respo
       return res.status(400).json({ error: 'Messages array is required.' });
     }
 
-    const { ai } = getGeminiClientForRequest(req);
-
-    if (!ai) {
-      return res.status(503).json({ error: 'Gemini API key is not configured.' });
-    }
-
     // Format contents for generateContent
     const formattedContents = messages.map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content || m.text || '' }],
     }));
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
-      contents: formattedContents,
-      config: {
-        systemInstruction:
-          'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi scriptwriter, poet, and voice direction consultant. You assist users in writing emotional Shayaris, dramatic dialogues, and story scripts tailored for Hindi Male and Female text-to-speech voices. Provide clear, expressive Hindi scripts in Devanagari. Format suggested scripts in clear blocks so the user can easily copy or insert them.',
-        temperature: 0.7,
-      },
+    const reply = await runWithKeyFailover(req, async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: formattedContents,
+        config: {
+          systemInstruction:
+            'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi scriptwriter, poet, and voice direction consultant. You assist users in writing emotional Shayaris, dramatic dialogues, and story scripts tailored for Hindi Male and Female text-to-speech voices. Provide clear, expressive Hindi scripts in Devanagari. Format suggested scripts in clear blocks so the user can easily copy or insert them.',
+          temperature: 0.7,
+        },
+      });
+      return response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।';
     });
 
-    return res.json({
-      reply: response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।',
-    });
+    return res.json({ reply });
   } catch (error: any) {
     console.error('Error in /api/ai/chat:', error);
     return res.status(500).json({
@@ -426,12 +445,6 @@ app.post('/api/ai/translate', rateLimiter(30, 60000), async (req: Request, res: 
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Text is required for translation.' });
-    }
-
-    const { ai } = getGeminiClientForRequest(req);
-
-    if (!ai) {
-      return res.status(503).json({ error: 'Gemini API key is not configured.' });
     }
 
     const isToHindi = targetLang === 'hindi';
@@ -464,49 +477,33 @@ Rules:
 4. Preserve punctuation, pauses, and rhetorical questions for voice cadence.
 5. Output ONLY the translated English script. Do NOT include quotes, "Translation:", notes, or preambles.`;
 
-    const candidateModels = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
-    let response;
-    let lastError: any = null;
-
-    for (const modelName of candidateModels) {
-      try {
-        response = await ai.models.generateContent({
-          model: modelName,
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${text}\n\n=== TRANSLATED OUTPUT ONLY ===`,
-                },
-              ],
-            },
-          ],
-          config: {
-            temperature: 0.25,
+    const translatedText = await runWithKeyFailover(req, async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${text}\n\n=== TRANSLATED OUTPUT ONLY ===`,
+              },
+            ],
           },
-        });
-        if (response?.text) {
-          break;
-        }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Translation attempt with ${modelName} failed, trying next candidate:`, err?.message);
+        ],
+        config: {
+          temperature: 0.25,
+        },
+      });
+
+      let out = response.text?.trim() || '';
+      if (out.startsWith('"') && out.endsWith('"')) {
+        out = out.slice(1, -1).trim();
       }
-    }
-
-    if (!response || !response.text) {
-      throw lastError || new Error('All translation models are temporarily busy. Please try again.');
-    }
-
-    let translatedText = response.text?.trim() || '';
-    // Strip accidental leading/trailing quotation marks if model wrapped them
-    if (translatedText.startsWith('"') && translatedText.endsWith('"')) {
-      translatedText = translatedText.slice(1, -1).trim();
-    }
-    if (translatedText.startsWith('“') && translatedText.endsWith('”')) {
-      translatedText = translatedText.slice(1, -1).trim();
-    }
+      if (out.startsWith('“') && out.endsWith('”')) {
+        out = out.slice(1, -1).trim();
+      }
+      return out;
+    });
 
     return res.json({ translatedText, targetLang, style });
   } catch (error: any) {
@@ -519,16 +516,14 @@ Rules:
 
 // GET /api/health
 app.get('/api/health', (req: Request, res: Response) => {
-  const { role, userEmail } = getGeminiClientForRequest(req);
+  const { keys, isAdmin } = getCandidateKeysForRequest(req);
   res.json({
     status: 'ok',
-    hasApiKey: !!(ADMIN_API_KEY || PUBLIC_API_KEY || process.env.GEMINI_API_KEY),
+    hasApiKey: keys.length > 0,
+    totalKeysInPool: keys.length,
     adminKeyConfigured: !!ADMIN_API_KEY,
     publicKeyConfigured: !!PUBLIC_API_KEY,
-    adminEmails: ADMIN_EMAILS,
-    primaryAdmin: ADMIN_EMAILS[0],
-    resolvedRole: role,
-    userEmail: userEmail || 'anonymous',
+    resolvedRole: isAdmin ? 'admin' : 'public',
     timestamp: new Date().toISOString(),
   });
 });

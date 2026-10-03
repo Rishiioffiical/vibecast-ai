@@ -45,7 +45,9 @@ service cloud.firestore {
         && (!('totalGeneratedChars' in data) || (data.totalGeneratedChars is number && data.totalGeneratedChars >= 0))
         && (!('totalTakes' in data) || (data.totalTakes is number && data.totalTakes >= 0))
         && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64))
-        && (!('lastLoginAt' in data) || (data.lastLoginAt is string && data.lastLoginAt.size() <= 64));
+        && (!('lastLoginAt' in data) || (data.lastLoginAt is string && data.lastLoginAt.size() <= 64))
+        && (!('lastResetDate' in data) || (data.lastResetDate is string && data.lastResetDate.size() <= 32))
+        && (!('lastBonusClaimDate' in data) || (data.lastBonusClaimDate is string && data.lastBonusClaimDate.size() <= 32));
     }
 
     // Validation Blueprint for Voice Takes
@@ -84,8 +86,13 @@ service cloud.firestore {
         && isValidUserProfile(incoming())
         && (isAdmin() || (
             incoming().isPremium == existing().isPremium
-            && incoming().credits <= existing().credits
             && incoming().id == existing().id
+            && (
+              // Standard deduction on take generation (credits only decrease or stay same)
+              incoming().credits <= existing().credits
+              // OR: Official Daily Reset at 12:00 AM / new calendar date (resets back to max 2,000 allowance)
+              || (incoming().credits <= 2000 && (!('lastResetDate' in existing()) || incoming().lastResetDate != existing().lastResetDate))
+            )
           ));
 
       allow delete: if isOwner(userId) || isAdmin();

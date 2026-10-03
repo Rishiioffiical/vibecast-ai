@@ -25,7 +25,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
   onOpenPremium,
   onOpenAdminKey,
 }) => {
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile, signOut, resetDailyQuotaManually } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
 
   if (!user || !userProfile) {
@@ -123,7 +123,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
           {!isAdmin && !userProfile.isPremium ? (
             <div className="p-2.5 rounded-xl bg-white border border-[#DFD6C7] space-y-1.5">
               <div className="flex justify-between items-center text-[11px]">
-                <span className="text-[#6F7C71] font-medium">Free Allowance:</span>
+                <span className="text-[#6F7C71] font-medium">Daily Allowance:</span>
                 <span className="font-mono-numbers font-bold text-[#1F261F]">
                   {remainingChars.toLocaleString()} / 2,000 Chars
                 </span>
@@ -134,9 +134,18 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
                   style={{ width: `${percentUsed}%` }}
                 />
               </div>
-              <p className="text-[10px] text-[#7A877C] italic text-right">
-                Per-user free quota
-              </p>
+              <div className="flex justify-between items-center text-[10px] text-[#7A877C] pt-0.5">
+                <span>🔄 Resets daily at 12:00 AM</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await resetDailyQuotaManually();
+                  }}
+                  className="text-[#B83848] hover:underline font-bold cursor-pointer"
+                >
+                  Sync Now
+                </button>
+              </div>
             </div>
           ) : (
             <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-center gap-2">

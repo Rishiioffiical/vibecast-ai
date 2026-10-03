@@ -30,6 +30,8 @@ import {
   ShieldCheck,
   Users,
   ArrowRightLeft,
+  Palette,
+  Type,
 } from 'lucide-react';
 import { ALL_VOICES, EMOTIONS, SAMPLE_SCRIPTS } from './data/voices';
 import { VoiceOption, EmotionOption, GeneratedClip, SampleScript, VoiceLanguage } from './types';
@@ -48,13 +50,26 @@ import { AuthModal } from './components/AuthModal';
 import { UserAccountBadge } from './components/UserAccountBadge';
 import { AiChatAssistant } from './components/AiChatAssistant';
 import { AdminKeyModal } from './components/AdminKeyModal';
-import { useAuth } from './contexts/AuthContext';
+import { ThemeCustomizerModal } from './components/ThemeCustomizerModal';
+import { useAuth, PUBLIC_SIGNUP_CHAR_LIMIT, getLocalDateString } from './contexts/AuthContext';
+import { useTheme } from './contexts/ThemeContext';
 
 export default function App() {
+  const {
+    currentTheme,
+    currentThemeId,
+    currentFont,
+    currentFontId,
+    editorFontSize,
+  } = useTheme();
+
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState<boolean>(false);
+
   const {
     user,
     userProfile,
     deductCredits,
+    resetDailyQuotaManually,
     saveTakeToCloud,
     fetchUserTakes,
     deleteTakeFromCloud,
@@ -77,18 +92,19 @@ export default function App() {
     return subscribeApiMode((mode) => setApiMode(mode));
   }, []);
 
-  // Daily quota tracking (25,000 characters / 40 scripts daily)
-  const MAX_CHARS_PER_DAY = 25000;
+  const userEmail = (user?.email || '').trim().toLowerCase();
+  const isAdmin = ['rdpandit913@gmail.com', 'dubeyrishi135@gmail.com'].includes(userEmail);
+  const isUnlimited = isAdmin || !!userProfile?.isPremium;
+
+  // Daily quota tracking (2,000 characters daily limit for public creators, unlimited for admin)
+  const MAX_CHARS_PER_DAY = isUnlimited ? 999999 : PUBLIC_SIGNUP_CHAR_LIMIT;
   const MAX_SCRIPTS_PER_DAY = 40;
 
-  const getTodayDateKey = () => {
-    const d = new Date();
-    return `vibecast_quota_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
+  const getTodayDateKey = () => `vibecast_quota_${getLocalDateString()}`;
 
   const [dailyUsage, setDailyUsage] = useState<{ chars: number; scripts: number }>(() => {
     try {
-      const key = `vibecast_quota_${new Date().toISOString().split('T')[0]}`;
+      const key = `vibecast_quota_${getLocalDateString()}`;
       const saved = localStorage.getItem(key);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -107,7 +123,7 @@ export default function App() {
         scripts: prev.scripts + 1,
       };
       try {
-        const key = `vibecast_quota_${new Date().toISOString().split('T')[0]}`;
+        const key = `vibecast_quota_${getLocalDateString()}`;
         localStorage.setItem(key, JSON.stringify(updated));
       } catch (e) {
         console.warn('Quota save error:', e);
@@ -115,6 +131,33 @@ export default function App() {
       return updated;
     });
   };
+
+  const handleManualQuotaReset = async () => {
+    if (user) {
+      const ok = await resetDailyQuotaManually();
+      setDailyUsage({ chars: 0, scripts: 0 });
+      try {
+        localStorage.removeItem(getTodayDateKey());
+      } catch (e) {}
+      if (ok) {
+        setSuccessNotice('🎉 Your daily credits have been refreshed to full allowance!');
+      } else {
+        setSuccessNotice('✅ Your credits are already up-to-date for today!');
+      }
+    } else {
+      setDailyUsage({ chars: 0, scripts: 0 });
+      try {
+        localStorage.removeItem(getTodayDateKey());
+      } catch (e) {}
+      setSuccessNotice('🎉 Free guest daily quota has been refreshed!');
+    }
+  };
+
+  const currentAvailableChars = isUnlimited
+    ? 999999
+    : user && userProfile
+    ? userProfile.credits
+    : Math.max(0, PUBLIC_SIGNUP_CHAR_LIMIT - dailyUsage.chars);
 
   // Voice filter: 'all' | 'hindi-male' | 'english-male' | 'female'
   const [voiceFilter, setVoiceFilter] = useState<'all' | 'hindi-male' | 'english-male' | 'female'>('all');
@@ -348,6 +391,38 @@ export default function App() {
 
         {/* Header Action Buttons: User Account/Credits, Premium/UPI & AI Assistant */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Theme & Font Styling Button */}
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md cursor-pointer border hover:scale-105 active:scale-95"
+            style={{
+              backgroundColor: currentTheme.cardBg,
+              borderColor: currentTheme.cardBorder,
+              color: currentTheme.textPrimary,
+            }}
+            title="Studio Theme & Font Styles (थीम व फॉन्ट सेटिंग)"
+          >
+            <div className="flex items-center gap-1">
+              {currentTheme.swatchColors.map((color, i) => (
+                <span
+                  key={i}
+                  className="w-2.5 h-2.5 rounded-full border border-black/20"
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+            <span className="font-mono-numbers text-[11px] font-bold">
+              {currentTheme.name}
+            </span>
+            <span
+              className="text-[10px] hidden sm:inline"
+              style={{ color: currentTheme.textSecondary }}
+            >
+              · {currentFont.name}
+            </span>
+          </button>
+
           <UserAccountBadge
             onOpenAuth={() => {
               setAuthModalTab('creator');
@@ -401,12 +476,28 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Toolbar Buttons: Dictate, Copy, Clear */}
-                <div className="flex items-center gap-2">
+                {/* Toolbar Buttons: Dictate, Font Selector, Copy, Clear */}
+                <div className="flex flex-wrap items-center gap-2">
                   <AudioTranscriber
                     onTranscriptionComplete={handleTranscriptionComplete}
                     onError={(err) => setErrorNotice(err)}
                   />
+
+                  {/* Quick Font Selector Pill */}
+                  <button
+                    type="button"
+                    onClick={() => setIsThemeModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer hover:opacity-90 active:scale-95 shadow-2xs"
+                    style={{
+                      backgroundColor: currentTheme.inputBg,
+                      borderColor: currentTheme.cardBorder,
+                      color: currentTheme.textPrimary,
+                    }}
+                    title="Change Script Font Style"
+                  >
+                    <Type className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
+                    <span className="font-bold">{currentFont.name}</span>
+                  </button>
 
                   <button
                     type="button"
@@ -430,11 +521,11 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Textarea */}
+              {/* Textarea with Dynamic Theme Font & Size */}
               <div className="relative">
                 <textarea
                   id="script-textarea"
-                  rows={6}
+                  rows={editorFontSize === 'huge' ? 7 : 6}
                   value={scriptText}
                   onChange={(e) => {
                     setScriptText(e.target.value);
@@ -442,7 +533,19 @@ export default function App() {
                     if (successNotice) setSuccessNotice(null);
                   }}
                   placeholder="Type your Hindi or English voiceover script here or click 'Dictate' to speak with your mic..."
-                  className="w-full bg-[#F4EFE6] text-[#1F261F] placeholder:text-[#8C988E] rounded-2xl p-4 sm:p-5 text-base sm:text-lg font-serif-display leading-relaxed border border-[#DFD6C7] focus:border-[#B83848] focus:ring-1 focus:ring-[#B83848] outline-none transition-all resize-y shadow-inner"
+                  className={`w-full rounded-2xl p-4 sm:p-5 outline-none transition-all resize-y shadow-inner border ${
+                    editorFontSize === 'normal'
+                      ? 'text-base leading-relaxed'
+                      : editorFontSize === 'huge'
+                      ? 'text-xl sm:text-2xl leading-loose font-medium'
+                      : 'text-base sm:text-lg leading-relaxed'
+                  }`}
+                  style={{
+                    backgroundColor: currentTheme.inputBg,
+                    borderColor: currentTheme.cardBorder,
+                    color: currentTheme.textPrimary,
+                    fontFamily: currentFont.fontFamily,
+                  }}
                 />
 
                 <div className="mt-2.5 flex justify-between items-center text-xs text-[#6F7C71] font-mono-numbers px-1">
@@ -628,12 +731,14 @@ export default function App() {
 
               {/* Real-time Daily Generation Quota & Remaining Counter */}
               <DailyQuotaTracker
-                usedChars={dailyUsage.chars}
-                usedScripts={dailyUsage.scripts}
+                remainingChars={currentAvailableChars}
                 maxCharsPerDay={MAX_CHARS_PER_DAY}
+                remainingScripts={Math.max(0, MAX_SCRIPTS_PER_DAY - dailyUsage.scripts)}
                 maxScriptsPerDay={MAX_SCRIPTS_PER_DAY}
                 currentScriptLength={scriptText.length}
+                isUnlimited={isUnlimited}
                 onUpgradeClick={() => setIsPremiumOpen(true)}
+                onManualReset={handleManualQuotaReset}
               />
 
               {/* Prominent Action Button: Generate Audio with Bold Italic Mashup */}
@@ -993,6 +1098,12 @@ export default function App() {
         currentUserEmail={user?.email}
       />
 
+      {/* Theme and Font Customizer Modal */}
+      <ThemeCustomizerModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+      />
+
       {/* Clean Studio Footer with Contact & UPI */}
       <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 border-t border-white/10 text-xs text-[#CBD8CD] flex flex-col sm:flex-row items-center justify-between gap-3 font-mono-numbers">
         <div className="flex flex-wrap items-center gap-2">
@@ -1003,6 +1114,16 @@ export default function App() {
           <span className="text-[#F0C05A] font-bold">UPI: 7571889019@ybl</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(true)}
+            className="text-[#FAF7EF] hover:text-[#F0C05A] font-bold cursor-pointer flex items-center gap-1.5 transition-colors"
+            title="Choose Themes and Fonts"
+          >
+            <Palette className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
+            <span>🎨 Theme: {currentTheme.name}</span>
+          </button>
+          <span>·</span>
           {!user && (
             <>
               <button
