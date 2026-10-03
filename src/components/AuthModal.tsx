@@ -43,6 +43,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setPassword('');
       setName('');
       setErrorMsg(null);
+      setIsLoading(false);
     }
   }, [isOpen]);
 
@@ -98,18 +99,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       await signInWithGoogle();
       onClose();
     } catch (err: any) {
-      console.error(err);
       const code = err?.code || '';
       const msg = err?.message || '';
 
+      // Gracefully handle user closing the popup: do not throw a loud error
+      if (code === 'auth/popup-closed-by-user' || msg.includes('popup-closed-by-user')) {
+        // User intentionally dismissed the popup, simply stop loading quietly
+        setIsLoading(false);
+        return;
+      }
+
       if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
         setErrorMsg(
-          'Google Sign-In is unavailable on this preview URL (domain not registered in Firebase Authorized Domains). Please use Email & Password below, or click "Continue as Guest" for instant 1-click access!'
+          'Google popup is restricted on this preview domain by Firebase security. Please use Email & Password below, or click "Continue as Guest" for instant 1-click access!'
         );
-      } else if (code === 'auth/popup-closed-by-user') {
-        setErrorMsg('Sign-in popup was closed before completing.');
       } else {
-        setErrorMsg(err.message || 'Google sign in failed. Please try Email & Password or Guest access.');
+        setErrorMsg(err.message || 'Google sign-in failed. Please try Email & Password or Guest access.');
       }
     } finally {
       setIsLoading(false);
@@ -186,7 +191,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* 1-Click Fast Guest Access */}
+          {/* 1-Click Fast Guest Access (Works 100% on every domain without popups) */}
           <button
             type="button"
             onClick={handleGuestSignIn}
