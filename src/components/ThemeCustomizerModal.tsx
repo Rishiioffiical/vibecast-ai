@@ -37,12 +37,10 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
       <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border-2 shadow-2xl p-5 sm:p-7 space-y-6 animate-in zoom-in-95"
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[36px] spatial-glass border border-white/20 shadow-2xl p-5 sm:p-7 space-y-6 animate-in zoom-in-95 relative"
         style={{
-          backgroundColor: currentTheme.cardBg,
-          borderColor: currentTheme.cardBorder,
           color: currentTheme.textPrimary,
         }}
         onClick={(e) => e.stopPropagation()}

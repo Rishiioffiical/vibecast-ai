@@ -130,27 +130,27 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const whatsappShareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
 
   return (
-    <div className="w-full max-w-xl mx-auto rounded-[36px] bg-[#FAF7EF] border-2 border-[#E5DECf] shadow-[0_25px_60px_-15px_rgba(25,40,28,0.45)] overflow-hidden transition-all text-[#1F261F]">
+    <div className="w-full max-w-xl mx-auto rounded-[36px] spatial-glass border border-white/20 shadow-2xl overflow-hidden transition-all text-[var(--text-primary)] relative">
       {/* Top Bar with Dropdown Icon, Audio/Script Segmented Control, and Options */}
-      <div className="p-5 sm:p-6 pb-4 flex items-center justify-between">
+      <div className="p-5 sm:p-6 pb-4 flex items-center justify-between border-b border-white/10">
         <button
           type="button"
           onClick={() => handleSkipTime(-5)}
-          className="w-10 h-10 rounded-full bg-[#35523E] text-[#FAF7EF] flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer shadow-sm border border-white/15 active:scale-95"
           title="Rewind 5s"
         >
           <ChevronDown className="w-5 h-5 stroke-[2.5]" />
         </button>
 
         {/* Segmented Control [ Audio ] [ Script ] */}
-        <div className="flex items-center bg-[#EAE3D2] p-1 rounded-full border border-[#D8CEBC]">
+        <div className="flex items-center bg-black/30 p-1 rounded-full border border-white/15 backdrop-blur-md">
           <button
             type="button"
             onClick={() => setViewMode('audio')}
             className={`inline-flex items-center gap-1.5 px-5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'audio'
-                ? 'bg-[#B83848] text-[#FAF7EF] shadow-sm'
-                : 'text-[#4A554D] hover:text-[#1F261F]'
+                ? 'bg-[var(--accent-color)] text-white shadow-md'
+                : 'text-white/70 hover:text-white'
             }`}
           >
             <Headphones className="w-3.5 h-3.5" />
@@ -162,8 +162,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             onClick={() => setViewMode('script')}
             className={`inline-flex items-center gap-1.5 px-5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
               viewMode === 'script'
-                ? 'bg-[#B83848] text-[#FAF7EF] shadow-sm'
-                : 'text-[#4A554D] hover:text-[#1F261F]'
+                ? 'bg-[var(--accent-color)] text-white shadow-md'
+                : 'text-white/70 hover:text-white'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -323,8 +323,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         )}
       </div>
 
-      {/* Retro Crimson Deck Player Controls */}
-      <div className="bg-[#B83848] text-[#FAF7EF] px-6 sm:px-8 py-6">
+      {/* Spatial Acrylic Deck Player Controls */}
+      <div className="bg-black/40 backdrop-blur-xl border-t border-white/15 text-white px-6 sm:px-8 py-5">
         <div className="flex items-center justify-between gap-3">
           {/* Rewind 10s */}
           <button

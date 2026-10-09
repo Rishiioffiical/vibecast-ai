@@ -30,31 +30,17 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
 
   if (!user || !userProfile) {
     return (
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onOpenAuth}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FAF7EF] hover:bg-[#EFE7D8] text-[#1F261F] text-xs font-bold transition-all shadow-md cursor-pointer border border-[#E0D7C9] active:scale-98"
-        >
-          <User className="w-4 h-4 text-[#B83848]" />
-          <span>Sign In</span>
-          <span className="font-mono-numbers px-2 py-0.5 rounded-full bg-[#B83848] text-white text-[10px] font-extrabold">
-            2k Free
-          </span>
-        </button>
-
-        {onOpenAdminKey && (
-          <button
-            type="button"
-            onClick={onOpenAdminKey}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-bold transition-all cursor-pointer border border-amber-300/30"
-            title="Admin Sign In / Access"
-          >
-            <Crown className="w-3.5 h-3.5 text-[#F0C05A] fill-[#F0C05A]" />
-            <span>👑 Admin</span>
-          </button>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={onOpenAuth}
+        className="inline-flex items-center gap-2 h-8 sm:h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all shadow-xs cursor-pointer border border-white/15 active:scale-95 whitespace-nowrap backdrop-blur-md"
+      >
+        <User className="w-3.5 h-3.5 text-white/90" />
+        <span>Sign In</span>
+        <span className="font-mono-numbers px-2 py-0.5 rounded-full bg-[var(--accent-color)] text-white text-[10px] font-extrabold shadow-xs">
+          2k Free
+        </span>
+      </button>
     );
   }
 
@@ -66,16 +52,16 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-1.5 bg-[#FAF7EF] p-1 rounded-full border border-[#E0D7C9] shadow-sm">
+      <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-full border border-white/15 shadow-sm backdrop-blur-md text-white">
         {/* Credits / Characters Pill */}
         <button
           type="button"
           onClick={isAdmin ? onOpenAdminKey : onOpenPremium}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7EF] hover:bg-[#EAE3D4] text-[#1F261F] text-xs font-bold transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full hover:bg-white/10 text-white text-xs font-bold transition-colors cursor-pointer"
           title={isAdmin ? "Admin Dedicated API Key" : "Free Character Limit"}
         >
-          <Zap className="w-3.5 h-3.5 text-[#B83848] fill-current" />
-          <span className="font-mono-numbers font-extrabold text-[#B83848]">
+          <Zap className="w-3.5 h-3.5 text-[var(--accent-color)] fill-current" />
+          <span className="font-mono-numbers font-extrabold text-[var(--accent-color)]">
             {isAdmin || userProfile.isPremium ? 'UNLIMITED' : `${remainingChars.toLocaleString()} Chars`}
           </span>
         </button>
@@ -84,22 +70,22 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
         <button
           type="button"
           onClick={() => setDropdownOpen((prev) => !prev)}
-          className="inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full bg-white hover:bg-[#F2ECE0] text-[#1F261F] text-xs font-bold border border-[#DFD6C7] transition-all cursor-pointer"
+          className="inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/15 transition-all cursor-pointer"
         >
-          <div className="w-5 h-5 rounded-full bg-[#344638] text-white flex items-center justify-center text-[10px] uppercase font-bold">
+          <div className="w-5 h-5 rounded-full bg-[var(--accent-color)] text-white flex items-center justify-center text-[10px] uppercase font-bold shadow-xs">
             {isAdmin ? '👑' : userProfile.displayName ? userProfile.displayName.charAt(0) : 'U'}
           </div>
           <span className="truncate max-w-[90px] text-[11px]">
             {isAdmin ? 'Admin' : (userProfile.displayName || 'Creator')}
           </span>
-          <ChevronDown className="w-3 h-3 text-[#7C887E]" />
+          <ChevronDown className="w-3 h-3 text-white/60" />
         </button>
       </div>
 
       {/* Dropdown Menu */}
       {dropdownOpen && (
         <div
-          className="absolute right-0 mt-2 w-64 bg-[#FAF7EF] border-2 border-[#D8CEBC] rounded-2xl shadow-xl p-3 z-50 space-y-2 animate-in fade-in"
+          className="absolute right-0 mt-2 w-64 spatial-glass border border-white/20 rounded-2xl shadow-2xl p-3.5 z-50 space-y-2.5 animate-in fade-in text-white"
           onClick={(e) => e.stopPropagation()}
         >
           {/* User Info Header */}

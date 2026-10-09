@@ -24,6 +24,10 @@ export interface ThemeConfig {
   canvasBg: string;
   cardBg: string;
   cardBorder: string;
+  glassBg: string;
+  glassBorder: string;
+  spatialGlow: string;
+  soundstageColor: string;
   inputBg: string;
   textPrimary: string;
   textSecondary: string;
@@ -32,7 +36,8 @@ export interface ThemeConfig {
   accentLight: string;
   tagBg: string;
   isDark: boolean;
-  swatchColors: [string, string, string]; // [canvas, card, accent]
+  swatchColors: [string, string, string]; // [canvas, glass, accent]
+  orbColors: [string, string, string];    // [primary aura, secondary aura, ambient light]
 }
 
 export interface FontConfig {
@@ -50,102 +55,127 @@ export interface FontConfig {
 export const THEMES: ThemeConfig[] = [
   {
     id: 'forest-sage',
-    name: 'Forest Sage',
-    hindiName: 'वन सेज (मूल)',
-    subtitle: 'Classic Retro-Editorial Studio',
-    canvasBg: '#344638',
-    cardBg: '#FAF7EF',
-    cardBorder: '#DFD6C7',
-    inputBg: '#F4EFE6',
-    textPrimary: '#1F261F',
-    textSecondary: '#5C6E60',
-    accent: '#B83848',
-    accentHover: '#9E2A3B',
-    accentLight: '#B838481A',
-    tagBg: '#2E4E3B14',
-    isDark: false,
-    swatchColors: ['#344638', '#FAF7EF', '#B83848'],
+    name: 'Spatial Emerald Sage',
+    hindiName: 'स्पेशियल एमराल्ड सेज',
+    subtitle: 'Frosted Emerald Acrylic & Bioluminescent Mint',
+    canvasBg: '#111813',
+    cardBg: 'rgba(23, 36, 28, 0.78)',
+    cardBorder: 'rgba(134, 186, 150, 0.22)',
+    glassBg: 'rgba(28, 44, 34, 0.65)',
+    glassBorder: 'rgba(180, 225, 195, 0.25)',
+    spatialGlow: 'rgba(56, 217, 169, 0.25)',
+    soundstageColor: '#38D9A9',
+    inputBg: 'rgba(14, 22, 17, 0.7)',
+    textPrimary: '#F3FAF5',
+    textSecondary: '#9CB7A2',
+    accent: '#E65C6E',
+    accentHover: '#D44759',
+    accentLight: 'rgba(230, 92, 110, 0.2)',
+    tagBg: 'rgba(56, 217, 169, 0.15)',
+    isDark: true,
+    swatchColors: ['#111813', '#23382B', '#E65C6E'],
+    orbColors: ['rgba(56, 217, 169, 0.25)', 'rgba(230, 92, 110, 0.2)', 'rgba(240, 192, 90, 0.15)'],
   },
   {
     id: 'midnight-obsidian',
-    name: 'Midnight Dark',
-    hindiName: 'मिडनाइट डार्क',
-    subtitle: 'Cinematic Obsidian Studio',
-    canvasBg: '#0F1412',
-    cardBg: '#18221D',
-    cardBorder: '#283830',
-    inputBg: '#131B17',
-    textPrimary: '#F1F7F3',
-    textSecondary: '#8CA393',
-    accent: '#E65C6E',
-    accentHover: '#D44759',
-    accentLight: '#E65C6E26',
-    tagBg: '#38D9A920',
+    name: 'VisionOS Obsidian',
+    hindiName: 'विज़नओएस ऑब्सिडियन',
+    subtitle: 'Deep Void Spatial Glass & Cyan Ion Beam',
+    canvasBg: '#080C0F',
+    cardBg: 'rgba(15, 21, 28, 0.78)',
+    cardBorder: 'rgba(255, 255, 255, 0.16)',
+    glassBg: 'rgba(19, 27, 36, 0.65)',
+    glassBorder: 'rgba(255, 255, 255, 0.22)',
+    spatialGlow: 'rgba(56, 189, 248, 0.28)',
+    soundstageColor: '#38BDF8',
+    inputBg: 'rgba(10, 14, 19, 0.7)',
+    textPrimary: '#F1F6FB',
+    textSecondary: '#8DA4B6',
+    accent: '#38BDF8',
+    accentHover: '#0EA5E9',
+    accentLight: 'rgba(56, 189, 248, 0.2)',
+    tagBg: 'rgba(56, 189, 248, 0.15)',
     isDark: true,
-    swatchColors: ['#0F1412', '#18221D', '#E65C6E'],
+    swatchColors: ['#080C0F', '#15212C', '#38BDF8'],
+    orbColors: ['rgba(56, 189, 248, 0.28)', 'rgba(168, 85, 247, 0.22)', 'rgba(59, 130, 246, 0.2)'],
   },
   {
     id: 'royal-amber',
-    name: 'Royal Amber',
-    hindiName: 'शाही अंबर व चाय',
-    subtitle: 'Warm Terracotta & Saffron Parchment',
-    canvasBg: '#382216',
-    cardBg: '#FCF7EE',
-    cardBorder: '#E2D1BE',
-    inputBg: '#F5ECDE',
-    textPrimary: '#26170E',
-    textSecondary: '#7A5741',
-    accent: '#C86227',
-    accentHover: '#A94E1B',
-    accentLight: '#C862271A',
-    tagBg: '#59382218',
-    isDark: false,
-    swatchColors: ['#382216', '#FCF7EE', '#C86227'],
+    name: 'Solar Amber Spatial',
+    hindiName: 'सोलर अंबर स्पेशल',
+    subtitle: 'Smoked Honey Glass & Golden Acoustic Bloom',
+    canvasBg: '#150E09',
+    cardBg: 'rgba(32, 21, 14, 0.78)',
+    cardBorder: 'rgba(245, 170, 95, 0.22)',
+    glassBg: 'rgba(38, 25, 17, 0.65)',
+    glassBorder: 'rgba(251, 191, 36, 0.25)',
+    spatialGlow: 'rgba(245, 158, 11, 0.28)',
+    soundstageColor: '#F59E0B',
+    inputBg: 'rgba(20, 13, 8, 0.7)',
+    textPrimary: '#FDF7EE',
+    textSecondary: '#BFA287',
+    accent: '#F59E0B',
+    accentHover: '#D97706',
+    accentLight: 'rgba(245, 158, 11, 0.2)',
+    tagBg: 'rgba(245, 158, 11, 0.15)',
+    isDark: true,
+    swatchColors: ['#150E09', '#2E1E13', '#F59E0B'],
+    orbColors: ['rgba(245, 158, 11, 0.28)', 'rgba(239, 68, 68, 0.18)', 'rgba(251, 191, 36, 0.2)'],
   },
   {
     id: 'nordic-indigo',
-    name: 'Nordic Indigo',
-    hindiName: 'नॉर्डिक इंडिगो',
-    subtitle: 'Deep Acoustic Navy & Electric Cobalt',
-    canvasBg: '#131D2D',
-    cardBg: '#F7FAFC',
-    cardBorder: '#CBD5E1',
-    inputBg: '#EEF3F8',
-    textPrimary: '#0F172A',
-    textSecondary: '#475569',
-    accent: '#2563EB',
-    accentHover: '#1D4ED8',
-    accentLight: '#2563EB1A',
-    tagBg: '#0F172A14',
-    isDark: false,
-    swatchColors: ['#131D2D', '#F7FAFC', '#2563EB'],
+    name: 'Nordic Cobalt Stage',
+    hindiName: 'नॉर्डिक कोबाल्ट स्टेज',
+    subtitle: 'Stratospheric Frosted Navy & Laser Blue Rim',
+    canvasBg: '#090F1C',
+    cardBg: 'rgba(16, 26, 48, 0.78)',
+    cardBorder: 'rgba(147, 197, 253, 0.22)',
+    glassBg: 'rgba(20, 32, 60, 0.65)',
+    glassBorder: 'rgba(191, 219, 254, 0.25)',
+    spatialGlow: 'rgba(96, 165, 250, 0.3)',
+    soundstageColor: '#60A5FA',
+    inputBg: 'rgba(10, 16, 30, 0.7)',
+    textPrimary: '#F2F6FC',
+    textSecondary: '#97A9C5',
+    accent: '#60A5FA',
+    accentHover: '#3B82F6',
+    accentLight: 'rgba(96, 165, 250, 0.2)',
+    tagBg: 'rgba(96, 165, 250, 0.15)',
+    isDark: true,
+    swatchColors: ['#090F1C', '#162444', '#60A5FA'],
+    orbColors: ['rgba(59, 130, 246, 0.3)', 'rgba(129, 140, 248, 0.22)', 'rgba(56, 189, 248, 0.2)'],
   },
   {
     id: 'kashmir-rose',
-    name: 'Kashmir Rose',
-    hindiName: 'कश्मीर रोज़',
-    subtitle: 'Soulful Ghazal & Velvet Mauve',
-    canvasBg: '#2C1825',
-    cardBg: '#FAF2F5',
-    cardBorder: '#E6CFDC',
-    inputBg: '#F3E5ED',
-    textPrimary: '#24121F',
-    textSecondary: '#754F6A',
-    accent: '#B82858',
-    accentHover: '#9C1E47',
-    accentLight: '#B828581A',
-    tagBg: '#3F1F3518',
-    isDark: false,
-    swatchColors: ['#2C1825', '#FAF2F5', '#B82858'],
+    name: 'Cosmic Nebula Glass',
+    hindiName: 'कॉस्मिक नेबुला ग्लास',
+    subtitle: 'Ultraviolet Acrylic & Shimmering Rose Quartz',
+    canvasBg: '#140A18',
+    cardBg: 'rgba(28, 14, 34, 0.78)',
+    cardBorder: 'rgba(244, 114, 182, 0.22)',
+    glassBg: 'rgba(36, 18, 44, 0.65)',
+    glassBorder: 'rgba(249, 168, 212, 0.25)',
+    spatialGlow: 'rgba(244, 114, 182, 0.28)',
+    soundstageColor: '#F472B6',
+    inputBg: 'rgba(18, 9, 22, 0.7)',
+    textPrimary: '#FDF3F8',
+    textSecondary: '#BC9DB5',
+    accent: '#F472B6',
+    accentHover: '#EC4899',
+    accentLight: 'rgba(244, 114, 182, 0.2)',
+    tagBg: 'rgba(244, 114, 182, 0.15)',
+    isDark: true,
+    swatchColors: ['#140A18', '#271330', '#F472B6'],
+    orbColors: ['rgba(192, 38, 211, 0.28)', 'rgba(244, 114, 182, 0.22)', 'rgba(147, 51, 234, 0.22)'],
   },
 ];
 
 export const FONTS: FontConfig[] = [
   {
     id: 'editorial-serif',
-    name: 'Editorial Serif',
-    hindiName: 'क्लासिक शेरीफ',
-    subtitle: 'Poetic, expressive & literary cadence',
+    name: 'Spatial Editorial Serif',
+    hindiName: 'स्पेशियल शेरीफ',
+    subtitle: 'Poetic, expressive & literary cadence with high legibility',
     fontFamily: "'Playfair Display', 'Fraunces', Georgia, serif",
     headingClass: "font-['Fraunces',serif]",
     editorClass: "font-['Playfair_Display',Georgia,serif]",
@@ -154,9 +184,9 @@ export const FONTS: FontConfig[] = [
   },
   {
     id: 'modern-sans',
-    name: 'Modern Sans',
-    hindiName: 'मॉडर्न सैन्स',
-    subtitle: 'Crisp, contemporary & high clarity',
+    name: 'Vision Modern Sans',
+    hindiName: 'विज़न मॉडर्न सैन्स',
+    subtitle: 'Crisp, contemporary & high clarity spatial UI',
     fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
     headingClass: "font-['Plus_Jakarta_Sans',sans-serif]",
     editorClass: "font-['Plus_Jakarta_Sans',sans-serif]",
@@ -262,12 +292,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {}
   };
 
-  // Synchronize CSS custom properties and body attributes
+  // Synchronize CSS custom properties and body attributes for Spatial UI
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--canvas-bg', currentTheme.canvasBg);
     root.style.setProperty('--card-bg', currentTheme.cardBg);
     root.style.setProperty('--card-border', currentTheme.cardBorder);
+    root.style.setProperty('--glass-bg', currentTheme.glassBg);
+    root.style.setProperty('--glass-border', currentTheme.glassBorder);
+    root.style.setProperty('--spatial-glow', currentTheme.spatialGlow);
+    root.style.setProperty('--soundstage-color', currentTheme.soundstageColor);
     root.style.setProperty('--input-bg', currentTheme.inputBg);
     root.style.setProperty('--text-primary', currentTheme.textPrimary);
     root.style.setProperty('--text-secondary', currentTheme.textSecondary);

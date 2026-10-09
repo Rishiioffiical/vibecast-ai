@@ -73,7 +73,7 @@ export const DailyQuotaTracker: React.FC<DailyQuotaTrackerProps> = ({
   const isLow = !isUnlimited && effectiveRemaining < 400;
 
   return (
-    <div className="bg-[#FAF7EF] border-2 border-[#DFD6C7] rounded-2xl p-4 shadow-sm space-y-2.5">
+    <div className="spatial-glass-interactive rounded-2xl p-4 shadow-lg border border-white/15 space-y-2.5 text-white">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div

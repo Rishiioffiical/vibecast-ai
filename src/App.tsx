@@ -51,6 +51,7 @@ import { UserAccountBadge } from './components/UserAccountBadge';
 import { AiChatAssistant } from './components/AiChatAssistant';
 import { AdminKeyModal } from './components/AdminKeyModal';
 import { ThemeCustomizerModal } from './components/ThemeCustomizerModal';
+import { SpatialSoundstage } from './components/SpatialSoundstage';
 import { useAuth, PUBLIC_SIGNUP_CHAR_LIMIT, getLocalDateString } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
 
@@ -82,7 +83,6 @@ export default function App() {
 
   // Auth Modal state
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
-  const [authModalTab, setAuthModalTab] = useState<'creator' | 'admin'>('creator');
 
   // Admin vs Public Key Modal & Mode state
   const [isAdminKeyModalOpen, setIsAdminKeyModalOpen] = useState<boolean>(false);
@@ -363,115 +363,151 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#344638] text-[#1E251F] font-['Plus_Jakarta_Sans',sans-serif] canvas-grid relative overflow-x-hidden selection:bg-[#B83848] selection:text-white">
-      {/* VibeCast Brand Header */}
-      <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10">
-        <div className="flex items-center gap-3.5">
-          <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-[#B83848] via-[#9E2A3B] to-[#7D1F2D] text-white flex items-center justify-center shadow-xl border-2 border-[#FAF7EF] rotate-[-2deg] hover:rotate-0 transition-transform">
-            <Radio className="w-7 h-7 stroke-[2.4]" />
-          </div>
-          <div>
-            <div className="flex items-baseline gap-1.5">
-              {/* Bold Italic & Grotesque Typography Mashup */}
-              <span className="font-bold-italic text-3xl sm:text-4xl text-[#FAF7EF] tracking-tight">
-                Vibe
-              </span>
-              <span className="font-syne font-extrabold text-3xl sm:text-4xl text-[#F0C05A] tracking-tighter uppercase">
-                Cast
-              </span>
-              <span className="ml-2 text-[10px] uppercase font-mono-numbers tracking-widest px-2.5 py-0.5 rounded-full bg-[#FAF7EF]/20 text-[#FAF7EF] font-bold border border-white/20">
-                Studio AI
-              </span>
-            </div>
-            <p className="text-xs text-[#CBD8CD] font-medium mt-0.5">
-              <span className="italic font-serif-display font-semibold">Natural Voices</span> · Hindi & English Male Prosody · 24kHz Studio Output
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen spatial-canvas text-[var(--text-primary)] font-['Plus_Jakarta_Sans',sans-serif] relative overflow-x-hidden selection:bg-[var(--accent-color)] selection:text-white">
+      {/* Ambient Floating Spatial Aurora Orbs */}
+      <div
+        className="spatial-orb -top-20 -left-20 w-96 h-96"
+        style={{ backgroundColor: currentTheme.orbColors[0] }}
+      />
+      <div
+        className="spatial-orb top-1/3 -right-32 w-[34rem] h-[34rem]"
+        style={{ backgroundColor: currentTheme.orbColors[1], animationDelay: '-6s' }}
+      />
+      <div
+        className="spatial-orb -bottom-20 left-1/4 w-[30rem] h-[30rem]"
+        style={{ backgroundColor: currentTheme.orbColors[2], animationDelay: '-12s' }}
+      />
 
-        {/* Header Action Buttons: User Account/Credits, Premium/UPI & AI Assistant */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Theme & Font Styling Button */}
-          <button
-            type="button"
-            onClick={() => setIsThemeModalOpen(true)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md cursor-pointer border hover:scale-105 active:scale-95"
-            style={{
-              backgroundColor: currentTheme.cardBg,
-              borderColor: currentTheme.cardBorder,
-              color: currentTheme.textPrimary,
-            }}
-            title="Studio Theme & Font Styles (थीम व फॉन्ट सेटिंग)"
-          >
-            <div className="flex items-center gap-1">
-              {currentTheme.swatchColors.map((color, i) => (
-                <span
-                  key={i}
-                  className="w-2.5 h-2.5 rounded-full border border-black/20"
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </div>
-            <span className="font-mono-numbers text-[11px] font-bold">
-              {currentTheme.name}
-            </span>
-            <span
-              className="text-[10px] hidden sm:inline"
-              style={{ color: currentTheme.textSecondary }}
+      {/* VibeCast Spatial Brand Header */}
+      <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-4 border-b border-white/10 relative z-10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg border border-white/30 rotate-[-2deg] hover:rotate-0 transition-transform flex-shrink-0"
+              style={{
+                background: `linear-gradient(135deg, ${currentTheme.accent}, #111a14)`,
+                boxShadow: `0 0 20px ${currentTheme.spatialGlow}`,
+              }}
             >
-              · {currentFont.name}
-            </span>
-          </button>
+              <Radio className="w-6 h-6 stroke-[2.4] text-white" />
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-bold-italic text-2xl sm:text-3xl text-white tracking-tight drop-shadow-sm">
+                  Vibe
+                </span>
+                <span
+                  className="font-syne font-extrabold text-2xl sm:text-3xl tracking-tighter uppercase"
+                  style={{ color: currentTheme.accent }}
+                >
+                  Cast
+                </span>
+                <span className="ml-1 text-[9px] uppercase font-mono-numbers tracking-widest px-2 py-0.5 rounded-full bg-white/10 text-white font-bold border border-white/20 backdrop-blur-md">
+                  Spatial AI
+                </span>
+              </div>
+              <p className="text-[11px] text-white/70 font-medium mt-0.5 hidden md:block">
+                <span className="italic font-serif-display font-semibold text-white">Spatial Voices</span> · Hindi & English Male Prosody · 24kHz Binaural Output
+              </p>
+            </div>
+          </div>
 
-          <UserAccountBadge
-            onOpenAuth={() => {
-              setAuthModalTab('creator');
-              setIsAuthOpen(true);
-            }}
-            onOpenPremium={() => setIsPremiumOpen(true)}
-            onOpenAdminKey={() => {
-              if (user) {
-                setIsAdminKeyModalOpen(true);
-              } else {
-                setAuthModalTab('admin');
-                setIsAuthOpen(true);
-              }
-            }}
-          />
+          {/* Unified Floating Spatial Toolbar Dock */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 self-start sm:self-auto bg-black/35 p-1.5 rounded-full border border-white/15 backdrop-blur-xl shadow-lg">
+            {/* Theme & Font Styling Button */}
+            <button
+              type="button"
+              onClick={() => setIsThemeModalOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 sm:h-9 px-3 rounded-full text-xs font-semibold transition-all shadow-xs cursor-pointer border hover:opacity-90 active:scale-98 flex-shrink-0"
+              style={{
+                backgroundColor: currentTheme.glassBg,
+                borderColor: currentTheme.glassBorder,
+                color: currentTheme.textPrimary,
+              }}
+              title="Studio Theme & Font Styles (थीम व फॉन्ट सेटिंग)"
+            >
+              <div className="flex items-center gap-1">
+                {currentTheme.swatchColors.map((color, i) => (
+                  <span
+                    key={i}
+                    className="w-2 h-2 rounded-full border border-black/20"
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+              <span className="font-mono-numbers text-[11px] font-bold">
+                {currentTheme.name}
+              </span>
+              <span
+                className="text-[10px] hidden lg:inline opacity-70"
+              >
+                · {currentFont.name}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setIsPremiumOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#B83848] via-[#9E2A3B] to-[#7D1F2D] hover:from-[#A0283A] hover:to-[#6E1824] text-white text-xs font-bold transition-all shadow-md cursor-pointer border border-[#FAF7EF]/30 active:scale-98"
-          >
-            <Crown className="w-4 h-4 text-[#F0C05A] fill-[#F0C05A]" />
-            <span className="font-syne font-bold uppercase tracking-wide">Premium & Support</span>
-          </button>
+            {/* AI Script Assistant */}
+            <button
+              type="button"
+              onClick={() => setIsChatOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 sm:h-9 px-3.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all shadow-xs cursor-pointer border border-white/15 active:scale-98 flex-shrink-0"
+              title="AI Script Assistant"
+            >
+              <Sparkles className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
+              <span>Script AI</span>
+            </button>
 
-          <button
-            onClick={() => setIsChatOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#FAF7EF] hover:bg-[#EFE7D8] text-[#1F261F] text-xs font-bold transition-all shadow-md cursor-pointer border border-[#E0D7C9] active:scale-98"
-          >
-            <Sparkles className="w-4 h-4 text-[#B83848]" />
-            <span className="font-bold-italic text-sm">VibeCast</span>
-            <span className="font-medium">Script AI</span>
-          </button>
+            {/* Premium & Support */}
+            <button
+              type="button"
+              onClick={() => setIsPremiumOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 sm:h-9 px-3.5 rounded-full text-white text-xs font-bold transition-all shadow-xs cursor-pointer border border-white/20 active:scale-98 flex-shrink-0"
+              style={{
+                backgroundColor: currentTheme.accent,
+                boxShadow: `0 0 16px ${currentTheme.spatialGlow}`,
+              }}
+              title="Premium & UPI Support"
+            >
+              <Crown className="w-3.5 h-3.5 fill-white text-white" />
+              <span className="font-syne font-bold uppercase tracking-wide">Premium</span>
+            </button>
+
+            {/* User Account / Sign In Badge */}
+            <div className="flex-shrink-0">
+              <UserAccountBadge
+                onOpenAuth={() => setIsAuthOpen(true)}
+                onOpenPremium={() => setIsPremiumOpen(true)}
+                onOpenAdminKey={() => setIsAdminKeyModalOpen(true)}
+              />
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Main Studio Workstation */}
-      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-7 space-y-7">
+      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-7 space-y-7 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
           {/* LEFT COLUMN: Main Voiceover Console & Player (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
-            {/* 1. Script Writing Card with Bold Italic Typography Mashup */}
-            <div className="card-cream rounded-[28px] p-6 sm:p-7 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E2DAD0]">
+            {/* 1. Script Writing Card with Spatial Frosted Glass */}
+            <div className="spatial-glass rounded-[32px] p-6 sm:p-7 shadow-2xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2">
-                  <label htmlFor="script-textarea" className="text-base text-[#1F261F]">
-                    <span className="font-bold-italic text-lg text-[#1F261F]">Script &</span>{' '}
-                    <span className="font-syne font-bold uppercase tracking-wide text-sm text-[#B83848]">Dialogue Editor</span>
+                  <label htmlFor="script-textarea" className="text-base text-[var(--text-primary)]">
+                    <span className="font-bold-italic text-lg text-white">Script &</span>{' '}
+                    <span
+                      className="font-syne font-bold uppercase tracking-wide text-sm"
+                      style={{ color: currentTheme.accent }}
+                    >
+                      Dialogue Editor
+                    </span>
                   </label>
-                  <span className="text-xs font-bold-italic text-[#B83848] bg-[#B83848]/10 px-2.5 py-0.5 rounded-full">
+                  <span
+                    className="text-xs font-bold-italic px-2.5 py-0.5 rounded-full border border-white/10"
+                    style={{
+                      backgroundColor: currentTheme.tagBg,
+                      color: currentTheme.accent,
+                    }}
+                  >
                     Hindi & English
                   </span>
                 </div>
@@ -588,7 +624,7 @@ export default function App() {
             </div>
 
             {/* 2. Voice & Performance Settings Card */}
-            <div className="card-cream rounded-[28px] p-6 sm:p-7 shadow-xl space-y-6">
+            <div className="spatial-glass rounded-[32px] p-6 sm:p-7 shadow-2xl space-y-6">
               {/* Voice Filter & Dropdown */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -859,17 +895,25 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* 3D Binaural Spatial Soundstage Radar & Acoustic Depth Console */}
+            <SpatialSoundstage accentColor={currentTheme.accent} />
           </div>
 
           {/* RIGHT COLUMN: Script Presets & Session History with Clear Option (5 cols) */}
           <div className="lg:col-span-5 space-y-6">
-            {/* Quick Script Templates with Bold Italic Mashup */}
-            <div className="card-cream rounded-[28px] p-6 sm:p-7 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-[#E2DAD0]">
-                <BookOpen className="w-4 h-4 text-[#B83848]" />
-                <h3 className="text-base text-[#1F261F]">
-                  <span className="font-bold-italic text-lg text-[#1F261F]">Curated</span>{' '}
-                  <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#B83848]">Scripts</span>
+            {/* Quick Script Templates with Spatial Glass */}
+            <div className="spatial-glass rounded-[32px] p-6 sm:p-7 shadow-2xl space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-white/10">
+                <BookOpen className="w-4 h-4" style={{ color: currentTheme.accent }} />
+                <h3 className="text-base text-white">
+                  <span className="font-bold-italic text-lg text-white">Curated</span>{' '}
+                  <span
+                    className="font-syne font-bold uppercase tracking-wider text-xs"
+                    style={{ color: currentTheme.accent }}
+                  >
+                    Scripts
+                  </span>
                 </h3>
               </div>
 
@@ -896,14 +940,19 @@ export default function App() {
               </div>
             </div>
 
-            {/* Session Takes History with PROMINENT "CLEAR HISTORY" OPTION */}
-            <div className="card-cream rounded-[28px] p-6 sm:p-7 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-[#E2DAD0]">
+            {/* Session Takes History with Spatial Glass */}
+            <div className="spatial-glass rounded-[32px] p-6 sm:p-7 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2">
-                  <History className="w-4 h-4 text-[#B83848]" />
-                  <h3 className="text-base text-[#1F261F]">
-                    <span className="font-bold-italic text-lg text-[#1F261F]">Session</span>{' '}
-                    <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#B83848]">History</span>
+                  <History className="w-4 h-4" style={{ color: currentTheme.accent }} />
+                  <h3 className="text-base text-white">
+                    <span className="font-bold-italic text-lg text-white">Session</span>{' '}
+                    <span
+                      className="font-syne font-bold uppercase tracking-wider text-xs"
+                      style={{ color: currentTheme.accent }}
+                    >
+                      History
+                    </span>
                   </h3>
                 </div>
 
@@ -912,7 +961,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleClearHistory}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#F4EFE6] hover:bg-rose-50 text-[#8C2A38] border border-[#DFD6C7] hover:border-rose-300 transition-all cursor-pointer shadow-xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white/10 hover:bg-rose-900/30 text-white border border-white/15 transition-all cursor-pointer shadow-xs"
                     title="Clear all generated recording history"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -997,17 +1046,17 @@ export default function App() {
               )}
             </div>
 
-            {/* Creator Support & UPI Payment Card */}
-            <div className="card-cream rounded-[28px] p-6 shadow-xl space-y-4 border-2 border-[#D8CEBC]">
-              <div className="flex items-center justify-between pb-3 border-b border-[#E2DAD0]">
+            {/* Creator Support & UPI Payment Card with Spatial Glass */}
+            <div className="spatial-glass rounded-[32px] p-6 shadow-2xl space-y-4 border border-white/15">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-[#5F259F] text-white flex items-center justify-center font-bold text-xs shadow-sm">
                     पे
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold font-fraunces text-[#1F261F] flex items-center gap-1.5">
+                    <h3 className="text-sm font-bold font-fraunces text-white flex items-center gap-1.5">
                       <span>UPI & Premium Support</span>
-                      <span className="text-[10px] font-mono-numbers px-2 py-0.5 rounded-full bg-[#B83848]/10 text-[#B83848] font-bold">
+                      <span className="text-[10px] font-mono-numbers px-2 py-0.5 rounded-full bg-white/10 text-white font-bold border border-white/15">
                         Direct
                       </span>
                     </h3>
@@ -1053,11 +1102,11 @@ export default function App() {
                 <div className="flex items-center gap-2 overflow-hidden">
                   <Mail className="w-4 h-4 text-[#B83848] flex-shrink-0" />
                   <span className="font-mono-numbers font-semibold truncate text-[11px]">
-                    dubeyrishi135@gmail.com
+                    support@vibecast.studio
                   </span>
                 </div>
                 <a
-                  href="mailto:dubeyrishi135@gmail.com?subject=VibeCast%20Query%20%2F%20Premium%20Support"
+                  href="mailto:support@vibecast.studio?subject=VibeCast%20Query%20%2F%20Premium%20Support"
                   className="font-bold text-[#2E4E3B] hover:underline flex-shrink-0 ml-2"
                 >
                   Contact
@@ -1088,7 +1137,6 @@ export default function App() {
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
-        initialTab={authModalTab}
       />
 
       {/* Admin vs Public Dual API Key Inspector Modal */}
@@ -1124,36 +1172,12 @@ export default function App() {
             <span>🎨 Theme: {currentTheme.name}</span>
           </button>
           <span>·</span>
-          {!user && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthModalTab('admin');
-                  setIsAuthOpen(true);
-                }}
-                className="text-[#F0C05A] hover:underline font-bold cursor-pointer flex items-center gap-1.5"
-              >
-                <Crown className="w-3.5 h-3.5 fill-[#F0C05A]" />
-                <span>👑 Admin Sign In / Sign Up</span>
-              </button>
-              <span>·</span>
-            </>
-          )}
           <a
-            href="mailto:dubeyrishi135@gmail.com"
+            href="mailto:support@vibecast.studio"
             className="hover:text-white underline transition-colors"
           >
-            Support: dubeyrishi135@gmail.com
+            Support: support@vibecast.studio
           </a>
-          <span>·</span>
-          <button
-            type="button"
-            onClick={() => setIsAdminKeyModalOpen(true)}
-            className="text-[#8E9F91] hover:text-white underline transition-colors cursor-pointer"
-          >
-            Admin & Key Settings
-          </button>
           <span>·</span>
           <button
             type="button"

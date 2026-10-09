@@ -40,7 +40,7 @@ export const AdminKeyModal: React.FC<AdminKeyModalProps> = ({
     setIsLoadingHealth(true);
     try {
       const mode = getActiveApiMode();
-      const testEmail = mode === 'admin' ? (currentUserEmail || 'dubeyrishi135@gmail.com') : 'public-tester@vibecast.app';
+      const testEmail = mode === 'admin' ? (currentUserEmail || 'admin@vibecast.studio') : 'public-tester@vibecast.app';
       const res = await fetch('/api/health', {
         headers: {
           'x-user-email': testEmail,
@@ -146,7 +146,7 @@ export const AdminKeyModal: React.FC<AdminKeyModalProps> = ({
             </div>
             <p className="text-xs text-[#5C6E60] leading-snug">
               Uses <span className="font-mono font-bold text-[#B83848]">ADMIN_API_KEY</span> for{' '}
-              <span className="font-semibold text-[#1F261F]">{currentUserEmail || 'dubeyrishi135@gmail.com'}</span>
+              <span className="font-semibold text-[#1F261F]">{currentUserEmail || 'Admin Workspace'}</span>
             </p>
           </button>
 
