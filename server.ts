@@ -401,7 +401,111 @@ app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Re
   }
 });
 
-// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-3.8-flash
+// Helper to extract deduplicated web sources from Gemini groundingMetadata
+function extractGroundingSources(response: any): {
+  sources: Array<{ title: string; uri: string }>;
+  searchQueries: string[];
+} {
+  const metadata = response?.candidates?.[0]?.groundingMetadata;
+  const chunks = metadata?.groundingChunks || [];
+  const seenUris = new Set<string>();
+  const sources: Array<{ title: string; uri: string }> = [];
+
+  for (const chunk of chunks) {
+    const uri = chunk?.web?.uri;
+    const title = chunk?.web?.title;
+    if (uri && typeof uri === 'string' && !seenUris.has(uri)) {
+      seenUris.add(uri);
+      sources.push({
+        title: (title && typeof title === 'string' ? title.trim() : uri),
+        uri,
+      });
+    }
+  }
+
+  const searchQueries = Array.isArray(metadata?.webSearchQueries)
+    ? metadata.webSearchQueries.filter((q: any) => typeof q === 'string')
+    : [];
+
+  return { sources, searchQueries };
+}
+
+// POST /api/ai/google-search-script - Generate a voiceover script grounded in real-time Google Search data
+app.post('/api/ai/google-search-script', rateLimiter(25, 60000), async (req: Request, res: Response) => {
+  try {
+    const { query, language = 'hindi', emotion = 'emotional-deep' } = req.body;
+
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return res.status(400).json({ error: 'Search topic or query is required.' });
+    }
+
+    const cleanQuery = query.trim();
+    const isHindi = language === 'hindi';
+
+    const emotionToneMap: Record<string, string> = {
+      'emotional-deep': 'deep, soulful, reflective, and emotionally resonant documentary narration',
+      'emotional-dramatic': 'intense, cinematic, commanding, and high-stakes broadcast storytelling',
+      'emotional-poetic': 'warm, eloquent, literary, and lyrical podcast storytelling',
+      'emotional-melancholy': 'poignant, thoughtful, and deeply moving narrative tone',
+      'emotional-inspiring': 'uplifting, visionary, energetic, and motivational voiceover narration',
+    };
+
+    const toneDescription = emotionToneMap[emotion] || emotionToneMap['emotional-deep'];
+
+    const prompt = isHindi
+      ? `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
+Using accurate, up-to-date information from Google Search, write a compelling, natural spoken voiceover / podcast script in pure Hindi (Devanagari script) suitable for immediate text-to-speech synthesis.
+Tone & Style: ${toneDescription}.
+Length: 4 to 6 rich, engaging spoken sentences (~80–140 words).
+Rules:
+1. Incorporate real facts, dates, figures, or recent developments found via Google Search naturally into the spoken narration.
+2. Write ONLY in clean Devanagari Hindi (e.g., नमस्ते दोस्तों...) with natural punctuation (commas, ellipses, full stops) for expressive vocal pauses.
+3. Return ONLY the spoken voiceover script text itself—no titles, no markdown headers, no bullet points, and no introductory remarks.`
+      : `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
+Using accurate, up-to-date information from Google Search, write a compelling, natural spoken voiceover / podcast script in English suitable for immediate text-to-speech synthesis.
+Tone & Style: ${toneDescription}.
+Length: 4 to 6 rich, engaging spoken sentences (~80–140 words).
+Rules:
+1. Incorporate real facts, dates, figures, or recent developments found via Google Search naturally into the spoken narration.
+2. Use natural punctuation (commas, ellipses, periods) for expressive vocal cadence.
+3. Return ONLY the spoken voiceover script text itself—no titles, no markdown headers, no bullet points, and no introductory remarks.`;
+
+    const result = await runWithKeyFailover(req, async (ai) => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          systemInstruction:
+            'You are an award-winning documentary & podcast voiceover scriptwriter. You always ground your scripts in real, up-to-date facts retrieved via Google Search and write clean spoken narration ready for studio TTS.',
+          temperature: 0.7,
+        },
+      });
+
+      let script = response.text?.trim() || '';
+      if (script.startsWith('"') && script.endsWith('"')) {
+        script = script.slice(1, -1).trim();
+      }
+      const { sources, searchQueries } = extractGroundingSources(response);
+      return { script, sources, searchQueries };
+    });
+
+    return res.json({
+      script: result.script,
+      sources: result.sources,
+      searchQueries: result.searchQueries,
+      language,
+      query: cleanQuery,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/ai/google-search-script:', error);
+    return res.status(500).json({
+      error: error?.message || 'Failed to generate script from Google Search data.',
+    });
+  }
+});
+
+// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-3.8-flash + Google Search Grounding
 app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Response) => {
   try {
     const { messages = [] } = req.body;
@@ -416,20 +520,27 @@ app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Respo
       parts: [{ text: m.content || m.text || '' }],
     }));
 
-    const reply = await runWithKeyFailover(req, async (ai) => {
+    const result = await runWithKeyFailover(req, async (ai) => {
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: formattedContents,
         config: {
+          tools: [{ googleSearch: {} }],
           systemInstruction:
-            'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi scriptwriter, poet, and voice direction consultant. You assist users in writing emotional Shayaris, dramatic dialogues, and story scripts tailored for Hindi Male and Female text-to-speech voices. Provide clear, expressive Hindi scripts in Devanagari. Format suggested scripts in clear blocks so the user can easily copy or insert them.',
+            'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi & English scriptwriter, documentary researcher, poet, and voice direction consultant. You have live Google Search access to ground scripts in real-time news, facts, history, sports, science, and current events. Assist users in writing emotional Shayaris, dramatic dialogues, and factual podcast/documentary scripts tailored for text-to-speech voices.',
           temperature: 0.7,
         },
       });
-      return response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।';
+      const reply = response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।';
+      const { sources, searchQueries } = extractGroundingSources(response);
+      return { reply, sources, searchQueries };
     });
 
-    return res.json({ reply });
+    return res.json({
+      reply: result.reply,
+      sources: result.sources,
+      searchQueries: result.searchQueries,
+    });
   } catch (error: any) {
     console.error('Error in /api/ai/chat:', error);
     return res.status(500).json({

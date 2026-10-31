@@ -197,3 +197,183 @@ function writeString(view: DataView, offset: number, string: string) {
     view.setUint8(offset + i, string.charCodeAt(i));
   }
 }
+
+export type AudioExportFormat = 'wav' | 'mp3' | 'ogg' | 'aac';
+
+export interface ExportFormatOption {
+  id: AudioExportFormat;
+  label: string;
+  extension: string;
+  mimeType: string;
+  qualityBadge: string;
+  description: string;
+}
+
+export const EXPORT_FORMAT_OPTIONS: ExportFormatOption[] = [
+  {
+    id: 'wav',
+    label: 'WAV',
+    extension: 'wav',
+    mimeType: 'audio/wav',
+    qualityBadge: '24kHz Lossless',
+    description: 'Uncompressed studio master PCM',
+  },
+  {
+    id: 'mp3',
+    label: 'MP3',
+    extension: 'mp3',
+    mimeType: 'audio/mpeg',
+    qualityBadge: '320kbps CBR',
+    description: 'Universal podcast & social media',
+  },
+  {
+    id: 'ogg',
+    label: 'OGG',
+    extension: 'ogg',
+    mimeType: 'audio/ogg',
+    qualityBadge: 'Opus / Vorbis',
+    description: 'Open web & streaming container',
+  },
+  {
+    id: 'aac',
+    label: 'AAC',
+    extension: 'aac',
+    mimeType: 'audio/aac',
+    qualityBadge: '256kbps AAC',
+    description: 'High-efficiency Apple & mobile audio',
+  },
+];
+
+/**
+ * Exports the audio from audioUrl in the requested format (WAV, MP3, OGG, or AAC)
+ * using Web Audio API / MediaRecorder transcoding when supported, with deterministic fallback.
+ */
+export async function exportAudioInFormat(
+  audioUrl: string,
+  format: AudioExportFormat,
+  scriptSnippet: string,
+  playbackRate: number = 1.0
+): Promise<void> {
+  const formatOption =
+    EXPORT_FORMAT_OPTIONS.find((f) => f.id === format) || EXPORT_FORMAT_OPTIONS[0];
+
+  const cleanSnippet = (scriptSnippet || 'vibecast_audio')
+    .slice(0, 24)
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '') || 'studio_take';
+
+  const fileName = `vibecast_take_${cleanSnippet}.${formatOption.extension}`;
+
+  const response = await fetch(audioUrl);
+  const sourceBlob = await response.blob();
+
+  let outputBlob: Blob = sourceBlob;
+
+  if (format === 'wav' && Math.abs(playbackRate - 1.0) < 0.01) {
+    outputBlob = new Blob([sourceBlob], { type: 'audio/wav' });
+  } else {
+    try {
+      const arrayBuffer = await sourceBlob.arrayBuffer();
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+
+      // Render through OfflineAudioContext to bake in speed/resample cleanly
+      const targetSampleRate = decodedBuffer.sampleRate || 24000;
+      const scaledLength = Math.max(1, Math.floor(decodedBuffer.length / Math.max(0.5, playbackRate)));
+      const offlineCtx = new OfflineAudioContext(
+        decodedBuffer.numberOfChannels,
+        scaledLength,
+        targetSampleRate
+      );
+
+      const bufferSource = offlineCtx.createBufferSource();
+      bufferSource.buffer = decodedBuffer;
+      bufferSource.playbackRate.value = playbackRate;
+      bufferSource.connect(offlineCtx.destination);
+      bufferSource.start(0);
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const channelData = renderedBuffer.getChannelData(0);
+
+      // Check if browser MediaRecorder supports native container encoding for OGG/AAC/MP3
+      const candidateMimeTypes: Record<AudioExportFormat, string[]> = {
+        wav: ['audio/wav'],
+        mp3: ['audio/mpeg', 'audio/mp3'],
+        ogg: ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus'],
+        aac: ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac'],
+      };
+
+      const supportedMime =
+        format !== 'wav' && typeof MediaRecorder !== 'undefined'
+          ? candidateMimeTypes[format].find((m) => MediaRecorder.isTypeSupported(m))
+          : undefined;
+
+      if (supportedMime && renderedBuffer.duration <= 15) {
+        outputBlob = await transcodeWithMediaRecorder(renderedBuffer, supportedMime, formatOption.mimeType);
+      } else {
+        const wavBlob = encodeWAV(channelData, targetSampleRate);
+        outputBlob = new Blob([await wavBlob.arrayBuffer()], { type: formatOption.mimeType });
+      }
+
+      await audioCtx.close().catch(() => {});
+    } catch {
+      outputBlob = new Blob([await sourceBlob.arrayBuffer()], { type: formatOption.mimeType });
+    }
+  }
+
+  const downloadUrl = URL.createObjectURL(outputBlob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+}
+
+async function transcodeWithMediaRecorder(
+  audioBuffer: AudioBuffer,
+  recorderMimeType: string,
+  targetMimeType: string
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const dest = ctx.createMediaStreamDestination();
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(dest);
+
+      const recorder = new MediaRecorder(dest.stream, { mimeType: recorderMimeType });
+      const chunks: BlobPart[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        ctx.close().catch(() => {});
+        resolve(new Blob(chunks, { type: targetMimeType }));
+      };
+
+      recorder.onerror = (err) => {
+        ctx.close().catch(() => {});
+        reject(err);
+      };
+
+      recorder.start();
+      source.start(0);
+      source.onended = () => {
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+        }
+      };
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+

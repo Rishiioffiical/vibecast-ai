@@ -8,18 +8,20 @@ import {
   VolumeX,
   Share2,
   Check,
-  Disc,
   MoreHorizontal,
-  ArrowDownLeft,
   ChevronDown,
   Repeat,
-  Shuffle,
   FileText,
   Headphones,
+  Loader2,
+  FileAudio,
 } from 'lucide-react';
-import WaveSurfer from 'wavesurfer.js';
-import { WaveSurferVisualizer } from './WaveSurferVisualizer';
-import { formatTime } from '../utils/audioSynthesis';
+import {
+  formatTime,
+  AudioExportFormat,
+  EXPORT_FORMAT_OPTIONS,
+  exportAudioInFormat,
+} from '../utils/audioSynthesis';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -36,7 +38,6 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   voiceName,
   emotionLabel,
   speedMultiplier,
-  engine,
   scriptSnippet,
   onSpeedChange,
 }) => {
@@ -48,35 +49,85 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'audio' | 'script'>('audio');
   const [showOptions, setShowOptions] = useState<boolean>(false);
+  const [selectedFormat, setSelectedFormat] = useState<AudioExportFormat>('mp3');
+  const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportedBadge, setExportedBadge] = useState<string | null>(null);
 
-  const waveSurferInstanceRef = useRef<WaveSurfer | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const optionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
+    setDuration(0);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.playbackRate = speedMultiplier;
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
   }, [audioUrl]);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speedMultiplier;
+    }
+  }, [speedMultiplier]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.muted = isMuted;
+    }
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(e.target as Node)) {
+        setShowOptions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const togglePlay = () => {
-    if (waveSurferInstanceRef.current) {
-      waveSurferInstanceRef.current.playPause();
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.play().catch((err) => console.warn('Audio play error:', err));
     } else {
-      setIsPlaying((prev) => !prev);
+      el.pause();
     }
   };
 
   const handleRestart = () => {
-    if (waveSurferInstanceRef.current) {
-      waveSurferInstanceRef.current.seekTo(0);
-      waveSurferInstanceRef.current.play();
-      setIsPlaying(true);
-    }
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = 0;
+    setCurrentTime(0);
+    el.play().catch((err) => console.warn('Audio restart error:', err));
   };
 
   const handleSkipTime = (seconds: number) => {
-    if (waveSurferInstanceRef.current) {
-      const current = waveSurferInstanceRef.current.getCurrentTime();
-      const newTime = Math.max(0, Math.min(duration, current + seconds));
-      waveSurferInstanceRef.current.setTime(newTime);
+    const el = audioRef.current;
+    if (!el) return;
+    const maxDur = Number.isFinite(el.duration) ? el.duration : duration;
+    const newTime = Math.max(0, Math.min(maxDur || 0, el.currentTime + seconds));
+    el.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTime = parseFloat(e.target.value);
+    setCurrentTime(newTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
     }
   };
 
@@ -94,16 +145,21 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
   };
 
-  const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = audioUrl;
-    const cleanSnippet = (scriptSnippet || 'vibecast_audio')
-      .slice(0, 24)
-      .replace(/[^a-zA-Z0-9]/g, '_');
-    a.download = `vibecast_take_${cleanSnippet}.wav`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async (formatOverride?: AudioExportFormat) => {
+    const targetFormat = formatOverride || selectedFormat;
+    if (formatOverride) {
+      setSelectedFormat(formatOverride);
+    }
+    setShowExportMenu(false);
+    setShowOptions(false);
+    setIsExporting(true);
+    try {
+      await exportAudioInFormat(audioUrl, targetFormat, scriptSnippet, speedMultiplier);
+      setExportedBadge(targetFormat.toUpperCase());
+      setTimeout(() => setExportedBadge(null), 2500);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleCopy = async () => {
@@ -131,6 +187,28 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   return (
     <div className="w-full max-w-xl mx-auto rounded-[36px] spatial-glass border border-white/20 shadow-2xl overflow-hidden transition-all text-[var(--text-primary)] relative">
+      {/* Hidden Native Audio Engine */}
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => {
+          const dur = e.currentTarget.duration;
+          if (Number.isFinite(dur)) {
+            setDuration(dur);
+          }
+          e.currentTarget.playbackRate = speedMultiplier;
+          e.currentTarget.volume = isMuted ? 0 : volume;
+        }}
+      />
+
       {/* Top Bar with Dropdown Icon, Audio/Script Segmented Control, and Options */}
       <div className="p-5 sm:p-6 pb-4 flex items-center justify-between border-b border-white/10">
         <button
@@ -187,25 +265,45 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             <span className="font-semibold">Share</span>
           </a>
 
-          {/* More Options / Download button */}
-          <div className="relative">
+          {/* More Options / Quick Format Export menu */}
+          <div className="relative" ref={optionsMenuRef}>
             <button
               type="button"
               onClick={() => setShowOptions((prev) => !prev)}
-              className="w-10 h-10 rounded-full bg-[#EAE3D2] text-[#35523E] flex items-center justify-center hover:bg-[#DDD3C0] transition-colors cursor-pointer"
-              title="Options & Export"
+              className="w-10 h-10 rounded-full bg-white/10 text-white border border-white/15 flex items-center justify-center hover:bg-white/20 transition-colors cursor-pointer"
+              title="Options & Export Formats"
             >
               <MoreHorizontal className="w-5 h-5 stroke-[2.5]" />
             </button>
 
             {showOptions && (
-              <div className="absolute right-0 top-12 w-52 bg-[#FAF7EF] border border-[#D8CEBC] rounded-2xl shadow-xl p-2 z-30 space-y-1">
+              <div className="absolute right-0 top-12 w-60 spatial-glass border border-white/20 rounded-2xl shadow-2xl p-2 z-40 space-y-1 text-white">
+                <div className="px-3 py-1.5 text-[10px] font-mono-numbers uppercase tracking-wider text-white/50 font-bold border-b border-white/10">
+                  Export Audio Format
+                </div>
+                {EXPORT_FORMAT_OPTIONS.map((fmt) => (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    onClick={() => handleDownload(fmt.id)}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 flex items-center justify-between cursor-pointer transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Download className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                      <span>Export as {fmt.label}</span>
+                    </span>
+                    <span className="text-[10px] font-mono-numbers text-white/60">
+                      .{fmt.extension}
+                    </span>
+                  </button>
+                ))}
+                <div className="border-t border-white/10 my-1" />
                 <a
                   href={whatsappShareUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setShowOptions(false)}
-                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-[#1F261F] hover:bg-[#EAE3D2] flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 flex items-center gap-2 cursor-pointer transition-colors"
                 >
                   <svg className="w-4 h-4 fill-[#25D366]" viewBox="0 0 24 24">
                     <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
@@ -215,23 +313,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    handleDownload();
-                    setShowOptions(false);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-[#1F261F] hover:bg-[#EAE3D2] flex items-center gap-2 cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-[#B83848]" />
-                  <span>Download WAV File</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
                     handleCopy();
                     setShowOptions(false);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-[#1F261F] hover:bg-[#EAE3D2] flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 flex items-center gap-2 cursor-pointer transition-colors"
                 >
-                  {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4 text-[#35523E]" />}
+                  {isCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4 text-white/70" />}
                   <span>{isCopied ? 'Copied!' : 'Copy Script Text'}</span>
                 </button>
               </div>
@@ -267,32 +354,28 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
             {/* Title & Metadata with Bold Italic Mashup */}
             <div className="space-y-1 mb-5">
-              <p className="text-xs uppercase tracking-widest font-semibold text-[#78857B] font-mono-numbers">
+              <p className="text-xs uppercase tracking-widest font-semibold text-white/60 font-mono-numbers">
                 VibeCast Master Session • {emotionLabel}
               </p>
-              <h2 className="text-2xl sm:text-3xl font-bold-italic text-[#1C221D] leading-tight line-clamp-2">
+              <h2 className="text-2xl sm:text-3xl font-bold-italic text-white leading-tight line-clamp-2">
                 {scriptSnippet.slice(0, 52).trim() + (scriptSnippet.length > 52 ? '...' : '')}
               </h2>
             </div>
 
-            {/* Acoustic WaveSurfer Visualizer */}
+            {/* Clean Spatial Progress Scrubber & Time Indicators */}
             <div className="space-y-2 mb-2">
-              <WaveSurferVisualizer
-                audioUrl={audioUrl}
-                isPlaying={isPlaying}
-                playbackRate={speedMultiplier}
-                volume={volume}
-                isMuted={isMuted}
-                onPlayStateChange={setIsPlaying}
-                onTimeUpdate={setCurrentTime}
-                onDurationChange={setDuration}
-                onWaveSurferReady={(ws) => {
-                  waveSurferInstanceRef.current = ws;
-                }}
+              <input
+                type="range"
+                min={0}
+                max={duration > 0 ? duration : 100}
+                step={0.05}
+                value={duration > 0 ? Math.min(currentTime, duration) : 0}
+                onChange={handleSeekChange}
+                className="w-full h-1.5 rounded-full cursor-pointer accent-[var(--accent-color)]"
               />
 
               {/* Time Indicators */}
-              <div className="flex justify-between items-center text-xs font-mono-numbers text-[#6A786D] px-1 font-semibold">
+              <div className="flex justify-between items-center text-xs font-mono-numbers text-white/70 px-1 font-semibold">
                 <span>{formatTime(currentTime)}</span>
                 <span>-{formatTime(remainingSeconds)}</span>
               </div>
@@ -390,7 +473,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           </button>
         </div>
 
-        {/* Bottom deck micro controls (Volume & Direct Download) */}
+        {/* Bottom deck micro controls (Volume & Multi-Format Export Dropdown) */}
         <div className="mt-4 pt-3 border-t border-white/15 flex items-center justify-between text-xs text-white/80">
           <div className="flex items-center gap-2">
             <button onClick={handleVolumeToggle} className="hover:text-white cursor-pointer">
@@ -412,7 +495,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
               href={whatsappShareUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold transition-all shadow-sm cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold transition-all shadow-sm cursor-pointer"
               title="Share take on WhatsApp"
             >
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
@@ -421,17 +504,97 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
               <span>WhatsApp</span>
             </a>
 
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white font-semibold transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Save Master WAV</span>
-            </button>
+            {/* Multi-Format Export Split Button & Dropdown */}
+            <div className="relative flex items-center" ref={exportMenuRef}>
+              <div className="inline-flex items-center rounded-full bg-white/15 border border-white/20 shadow-sm overflow-hidden">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => handleDownload(selectedFormat)}
+                  className="inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 hover:bg-white/15 text-white font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                  title={`Export audio as .${selectedFormat.toUpperCase()}`}
+                >
+                  {isExporting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-color)]" />
+                  ) : exportedBadge ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                  )}
+                  <span>
+                    {exportedBadge
+                      ? `Saved ${exportedBadge}`
+                      : `Export ${selectedFormat.toUpperCase()}`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu((prev) => !prev)}
+                  className="px-2 py-1.5 border-l border-white/15 hover:bg-white/20 text-white/90 hover:text-white transition-colors cursor-pointer flex items-center"
+                  title="Choose audio export format (MP3, OGG, AAC, WAV)"
+                  aria-label="Choose audio export format"
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      showExportMenu ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Format Selection Dropdown Menu */}
+              {showExportMenu && (
+                <div className="absolute right-0 bottom-full mb-2 w-64 spatial-glass border border-white/25 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-white animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/10">
+                    <span className="text-[10px] font-mono-numbers uppercase tracking-wider text-white/60 font-bold flex items-center gap-1.5">
+                      <FileAudio className="w-3 h-3 text-[var(--accent-color)]" />
+                      <span>Select Export Format</span>
+                    </span>
+                    <span className="text-[10px] font-mono-numbers text-white/40">24kHz</span>
+                  </div>
+
+                  {EXPORT_FORMAT_OPTIONS.map((fmt) => {
+                    const isSelected = selectedFormat === fmt.id;
+                    return (
+                      <button
+                        key={fmt.id}
+                        type="button"
+                        onClick={() => handleDownload(fmt.id)}
+                        className={`w-full text-left px-3 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-[var(--accent-color)]/25 border border-[var(--accent-color)]/50 text-white'
+                            : 'hover:bg-white/10 text-white/90 border border-transparent'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono-numbers font-bold text-xs">
+                              {fmt.label}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-white/80 font-mono-numbers">
+                              {fmt.qualityBadge}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-white/55 mt-0.5">{fmt.description}</p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono-numbers text-white/50">
+                            .{fmt.extension}
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 };
+

@@ -9,13 +9,21 @@ import {
   Copy,
   Check,
   Loader2,
+  ExternalLink,
+  Globe,
 } from 'lucide-react';
 import { getApiHeaders } from '../utils/apiClient';
+
+interface GroundingSource {
+  title: string;
+  uri: string;
+}
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
+  sources?: GroundingSource[];
 }
 
 interface AiChatAssistantProps {
@@ -34,7 +42,7 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
       id: 'welcome',
       role: 'model',
       content:
-        'Greetings! I am your **Velvet Vox Editorial Script Assistant**. I can help you compose poignant Hindi Shayaris, dramatic cinematic monologues, historical narratives, and podcast scripts crafted for natural speech synthesis. What are we voicing today?',
+        'Greetings! I am your **Velvet Vox Editorial Script Assistant** with live **Google Search Grounding**. I can research real-time news, historical events, sports, or science facts and compose Hindi Shayaris, dramatic monologues, and podcast scripts crafted for natural speech synthesis. What are we voicing today?',
     },
   ]);
   const [inputPrompt, setInputPrompt] = useState<string>('');
@@ -84,6 +92,7 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
         id: `bot-${Date.now()}`,
         role: 'model',
         content: data.reply || 'No response received from the assistant.',
+        sources: Array.isArray(data.sources) ? data.sources : [],
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -107,10 +116,10 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
   };
 
   const quickPrompts = [
+    'Write a Hindi podcast script on ISRO latest news',
     'Write a deep emotional Hindi shayari',
-    'Cinematic monologue about destiny',
-    'Nostalgic reflection on childhood memories',
-    'Inspirational podcast opening',
+    'Latest India cricket news voiceover script',
+    'Inspirational podcast opening on AI trends',
   ];
 
   if (!isOpen) return null;
@@ -125,11 +134,15 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold font-serif-display text-[#1C221D]">
-                Velvet Vox Scriptwriter
+              <h3 className="text-base font-bold font-serif-display text-[#1C221D] flex items-center gap-2">
+                <span>Velvet Vox Scriptwriter</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#2E4E3B]/15 text-[#2E4E3B] font-bold">
+                  <Globe className="w-3 h-3" />
+                  Google Search Grounded
+                </span>
               </h3>
               <p className="text-xs text-[#5F6A60]">
-                Editorial Script & Dialogue Assistant (Powered by Gemini AI)
+                Editorial Script &amp; Live Fact Research Assistant (Gemini AI + Google Search)
               </p>
             </div>
           </div>
@@ -187,6 +200,31 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
                   <p className="whitespace-pre-wrap font-serif-display text-sm sm:text-base leading-relaxed">
                     {msg.content}
                   </p>
+
+                  {/* Grounded Web Sources */}
+                  {isBot && msg.sources && msg.sources.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t border-[#EAE3D4] space-y-1.5">
+                      <p className="text-[10px] font-mono uppercase tracking-wider font-bold text-[#2E4E3B] flex items-center gap-1">
+                        <Globe className="w-3 h-3" />
+                        <span>Google Search Sources ({msg.sources.length}):</span>
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.sources.map((src, sIdx) => (
+                          <a
+                            key={`${src.uri}-${sIdx}`}
+                            href={src.uri}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FAF7EF] hover:bg-[#EAE3D2] border border-[#D8CEBC] text-[11px] text-[#1F261F] hover:text-[#B83848] font-medium transition-colors max-w-[240px] truncate"
+                            title={src.title}
+                          >
+                            <ExternalLink className="w-3 h-3 text-[#2E4E3B] flex-shrink-0" />
+                            <span className="truncate">{src.title}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Actions for Bot Messages */}
                   {isBot && msg.id !== 'welcome' && (
