@@ -1,6 +1,34 @@
 import { VoiceOption, EmotionOption, SampleScript } from '../types';
 
 export const ALL_VOICES: VoiceOption[] = [
+  // --- INDIAN EDUCATIONAL & HINGLISH VOICES (CRYSTAL CLEAR HUMAN PROSODY) ---
+  {
+    id: 'indian-edu-siddharth',
+    name: 'Siddharth (Indian Educator)',
+    language: 'hindi',
+    gender: 'male',
+    accent: 'Indian Accent (Hinglish & Hindi)',
+    tone: 'Crystal-Clear Educational, Articulate & Natural Human',
+    description:
+      'Ultra-clear Indian educator & explainer voice (Dhruv Rathee / Nitish Rajput style). Speaks Hinglish, Hindi, and English with authentic Indian pronunciation, crisp diction, and zero robotic AI tone.',
+    recommendedEmotion: 'educational-clear',
+    geminiVoice: 'Charon',
+    badge: '★ Best Hinglish & Educational',
+  },
+  {
+    id: 'indian-edu-raghav',
+    name: 'Prof. Raghav (Indian Explainer)',
+    language: 'hindi',
+    gender: 'male',
+    accent: 'Indian Accent (Clear Bilingual)',
+    tone: 'Authoritative, Crystal-Clear & Documentary',
+    description:
+      'Deep, articulate Indian lecture and documentary narrator. Engineered for UPSC/science explainers, Hinglish case studies, and crystal-clear educational storytelling.',
+    recommendedEmotion: 'educational-clear',
+    geminiVoice: 'Fenrir',
+    badge: '🎓 Crystal-Clear Educator',
+  },
+
   // --- HINDI MALE VOICES ---
   {
     id: 'hindi-male-deep',
@@ -103,6 +131,18 @@ export const ALL_VOICES: VoiceOption[] = [
 
   // --- COMPLEMENTARY FEMALE VOICES ---
   {
+    id: 'indian-edu-ananya',
+    name: 'Ananya (Indian Educator)',
+    language: 'hindi',
+    gender: 'female',
+    accent: 'Indian Accent (Hinglish & English)',
+    tone: 'Crystal-Clear Educational & Articulate',
+    description: 'Crisp, natural Indian female educator voice for Hinglish explainers, tutorials, and documentary narration.',
+    recommendedEmotion: 'educational-clear',
+    geminiVoice: 'Kore',
+    badge: '🎓 Indian Educator',
+  },
+  {
     id: 'hindi-female-meera',
     name: 'Meera',
     language: 'hindi',
@@ -127,6 +167,14 @@ export const ALL_VOICES: VoiceOption[] = [
 ];
 
 export const EMOTIONS: EmotionOption[] = [
+  {
+    id: 'educational-clear',
+    label: '🎓 Educational & Crystal Clear',
+    description: 'Crisp Indian accent diction, natural human breath pauses, zero robotic AI tone — ideal for Hinglish & explainers',
+    category: 'educational',
+    pitchOffset: 1.0,
+    rateOffset: 1.0,
+  },
   {
     id: 'emotional-deep',
     label: 'Deep & Soulful',
@@ -170,6 +218,17 @@ export const EMOTIONS: EmotionOption[] = [
 ];
 
 export const SAMPLE_SCRIPTS: SampleScript[] = [
+  // --- HINGLISH EDUCATIONAL SAMPLE ---
+  {
+    id: 'hinglish-educational-explainer',
+    title: 'Hinglish Educational Explainer (Indian Accent)',
+    language: 'hindi',
+    category: 'Educational Explainer',
+    text: 'Namaskar doston! Aaj ke is educational episode mein hum bilkul simple aur crystal clear tareeke se samjhenge ki Artificial Intelligence aur Quantum Computing hamari duniya ko kaise badal rahe hain. Dekhiye, jab bhi koi nayi technology aati hai, toh uske peeche ek gehra scientific logic hota hai. Chaliye is concept ko step by step detail mein explore karte hain.',
+    recommendedVoiceId: 'indian-edu-siddharth',
+    recommendedEmotionId: 'educational-clear',
+    speed: 1.0,
+  },
   // --- ENGLISH SAMPLES ---
   {
     id: 'english-cinematic',

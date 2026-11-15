@@ -32,6 +32,9 @@ import {
   ArrowRightLeft,
   Palette,
   Type,
+  Lock,
+  Unlock,
+  GraduationCap,
 } from 'lucide-react';
 import { ALL_VOICES, EMOTIONS, SAMPLE_SCRIPTS } from './data/voices';
 import { VoiceOption, EmotionOption, GeneratedClip, SampleScript, VoiceLanguage } from './types';
@@ -39,6 +42,7 @@ import {
   callGeminiTts,
   estimateDurationSec,
 } from './utils/audioSynthesis';
+import { recognizeScript } from './utils/scriptRecognition';
 import { getActiveApiMode, subscribeApiMode, ApiMode } from './utils/apiClient';
 import { AudioPlayer } from './components/AudioPlayer';
 import { AudioTranscriber } from './components/AudioTranscriber';
@@ -76,9 +80,79 @@ export default function App() {
   } = useAuth();
 
   const [scriptText, setScriptText] = useState<string>(SAMPLE_SCRIPTS[0].text);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('english-male-marcus');
-  const [selectedEmotionId, setSelectedEmotionId] = useState<string>('emotional-dramatic');
-  const [speed, setSpeed] = useState<number>(1.0);
+
+  // Persistent Voice Lock: Uses the exact same voice every time until manually changed by the user
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('vibecast_selected_voice_id');
+      if (saved && ALL_VOICES.some((v) => v.id === saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'indian-edu-siddharth';
+  });
+
+  const [selectedEmotionId, setSelectedEmotionId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('vibecast_selected_emotion_id');
+      if (saved && EMOTIONS.some((e) => e.id === saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'educational-clear';
+  });
+
+  const [speed, setSpeed] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('vibecast_selected_speed');
+      if (saved && !isNaN(parseFloat(saved))) {
+        return Math.min(2.0, Math.max(0.5, parseFloat(saved)));
+      }
+    } catch {}
+    return 1.0;
+  });
+
+  const [isVoiceLocked, setIsVoiceLocked] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vibecast_voice_locked');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  // Persist user's manually chosen voice, emotion, speed, and lock preference
+  const handleManualVoiceChange = (newVoiceId: string) => {
+    setSelectedVoiceId(newVoiceId);
+    try {
+      localStorage.setItem('vibecast_selected_voice_id', newVoiceId);
+    } catch {}
+  };
+
+  const handleManualEmotionChange = (newEmotionId: string) => {
+    setSelectedEmotionId(newEmotionId);
+    try {
+      localStorage.setItem('vibecast_selected_emotion_id', newEmotionId);
+    } catch {}
+  };
+
+  const handleManualSpeedChange = (newSpeed: number) => {
+    const clamped = Math.min(2.0, Math.max(0.5, newSpeed));
+    setSpeed(clamped);
+    try {
+      localStorage.setItem('vibecast_selected_speed', String(clamped));
+    } catch {}
+  };
+
+  const handleToggleVoiceLock = () => {
+    setIsVoiceLocked((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('vibecast_voice_locked', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Auth Modal state
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
@@ -181,17 +255,23 @@ export default function App() {
   const selectedVoice = ALL_VOICES.find((v) => v.id === selectedVoiceId) || ALL_VOICES[0];
   const selectedEmotion = EMOTIONS.find((e) => e.id === selectedEmotionId) || EMOTIONS[0];
 
+  // Real-time Script Recognition (Devanagari Hindi, Hinglish, or Indian English)
+  const scriptRecognition = recognizeScript(scriptText);
+
   const estimatedSeconds = estimateDurationSec(scriptText, speed);
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
   const charCount = scriptText.length;
 
-  // Filtered voice list
-  const filteredVoiceList = ALL_VOICES.filter((v) => {
+  // Filtered voice list — always keep the currently selected/locked voice present so dropdown never resets it
+  const baseFilteredVoices = ALL_VOICES.filter((v) => {
     if (voiceFilter === 'hindi-male') return v.language === 'hindi' && v.gender === 'male';
     if (voiceFilter === 'english-male') return v.language === 'english' && v.gender === 'male';
     if (voiceFilter === 'female') return v.gender === 'female';
     return true;
   });
+  const filteredVoiceList = baseFilteredVoices.some((v) => v.id === selectedVoice.id)
+    ? baseFilteredVoices
+    : [selectedVoice, ...baseFilteredVoices];
 
   // Timer while generating
   useEffect(() => {
@@ -247,7 +327,9 @@ export default function App() {
 
     const remainingChars = Math.max(0, MAX_CHARS_PER_DAY - dailyUsage.chars);
     if (remainingChars <= 0) {
-      setErrorNotice('You have reached your daily generation allowance of 25,000 characters. Quota resets at 12:00 AM midnight!');
+      setErrorNotice(
+        `You have reached your daily generation allowance of ${MAX_CHARS_PER_DAY.toLocaleString()} characters. Quota resets at 12:00 AM midnight!`
+      );
       return;
     }
 
@@ -259,9 +341,11 @@ export default function App() {
       const result = await callGeminiTts({
         text: scriptText,
         voiceName: selectedVoice.geminiVoice,
+        voiceId: selectedVoice.id,
         emotion: selectedEmotion.id,
         speed: speed,
         language: selectedVoice.language,
+        scriptMode: scriptRecognition.scriptType,
       });
 
       const newClip: GeneratedClip = {
@@ -271,7 +355,7 @@ export default function App() {
         audioUrl: result.audioUrl,
         voiceName: `${selectedVoice.name} (${selectedVoice.accent})`,
         language: selectedVoice.language,
-        emotionLabel: selectedEmotion.label,
+        emotionLabel: `${selectedEmotion.label} · ${scriptRecognition.shortBadge}`,
         speed: speed,
         duration: estimatedSeconds,
         timestamp: Date.now(),
@@ -289,7 +373,9 @@ export default function App() {
 
       setActiveClip(newClip);
       setClipHistory((prev) => [newClip, ...prev]);
-      setSuccessNotice(`Take synthesized with ${selectedVoice.name} (${scriptText.length} credits used)`);
+      setSuccessNotice(
+        `Synthesized with locked voice "${selectedVoice.name}" [${scriptRecognition.label}] (${scriptText.length} credits used)`
+      );
 
       // Scroll to player
       setTimeout(() => {
@@ -305,22 +391,26 @@ export default function App() {
 
   const handleSelectPresetScript = (preset: SampleScript) => {
     setScriptText(preset.text);
-    if (preset.recommendedVoiceId) {
-      setSelectedVoiceId(preset.recommendedVoiceId);
-      const matched = ALL_VOICES.find((v) => v.id === preset.recommendedVoiceId);
-      if (matched) {
-        if (matched.language === 'hindi') setVoiceFilter('hindi-male');
-        else if (matched.language === 'english') setVoiceFilter('english-male');
+    // Only change voice/emotion if Voice Lock is explicitly turned OFF by the user
+    if (!isVoiceLocked) {
+      if (preset.recommendedVoiceId) {
+        handleManualVoiceChange(preset.recommendedVoiceId);
+        const matched = ALL_VOICES.find((v) => v.id === preset.recommendedVoiceId);
+        if (matched) {
+          if (matched.language === 'hindi') setVoiceFilter('hindi-male');
+          else if (matched.language === 'english') setVoiceFilter('english-male');
+        }
       }
-    }
-    if (preset.recommendedEmotionId) {
-      setSelectedEmotionId(preset.recommendedEmotionId);
-    }
-    if (preset.speed) {
-      setSpeed(preset.speed);
+      if (preset.recommendedEmotionId) {
+        handleManualEmotionChange(preset.recommendedEmotionId);
+      }
+      if (preset.speed) {
+        handleManualSpeedChange(preset.speed);
+      }
+    } else {
+      setSuccessNotice(`Loaded script "${preset.title}" — keeping your locked voice (${selectedVoice.name}).`);
     }
     setErrorNotice(null);
-    setSuccessNotice(null);
   };
 
   const handleClearText = () => {
@@ -582,21 +672,54 @@ export default function App() {
                   }}
                 />
 
-                <div className="mt-2.5 flex justify-between items-center text-xs text-[#6F7C71] font-mono-numbers px-1">
+                <div className="mt-2.5 flex justify-between items-center text-xs text-white/75 font-mono-numbers px-1">
                   <span>{wordCount} Words · {charCount} Characters</span>
-                  <span className="font-bold text-[#B83848] bg-[#B83848]/10 px-2 py-0.5 rounded-md">
+                  <span className="font-bold text-[#FF8A98] bg-[#B83848]/20 border border-[#B83848]/35 px-2.5 py-0.5 rounded-md">
                     Estimated Duration: ~{estimatedSeconds}s
                   </span>
+                </div>
+
+                {/* Smart Script Recognition & Locked Voice Status Bar */}
+                <div className="mt-3 p-3 rounded-2xl bg-white/10 border border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#2E4E3B] text-white font-bold text-[11px] shadow-2xs border border-emerald-400/30">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      <span>{scriptRecognition.shortBadge}</span>
+                    </span>
+                    <span className="font-semibold text-white/90">
+                      {scriptRecognition.accentLabel}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleToggleVoiceLock}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                        isVoiceLocked
+                          ? 'bg-[#B83848]/25 border-[#FF8A98]/45 text-white'
+                          : 'bg-white/10 border-white/20 text-white/75 hover:text-white'
+                      }`}
+                      title="When locked, the exact same voice is used for every script until you manually change it"
+                    >
+                      {isVoiceLocked ? <Lock className="w-3 h-3 text-[#FF8A98]" /> : <Unlock className="w-3 h-3" />}
+                      <span>
+                        {isVoiceLocked
+                          ? `Voice Locked: ${selectedVoice.name.split(' ')[0]}`
+                          : 'Voice Unlocked'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* AI Script Polish Toolbar */}
-              <div className="pt-2 border-t border-[#E2DAD0]">
+              <div className="pt-2 border-t border-white/15">
                 <AiScriptEnhancer
                   currentText={scriptText}
                   onEnhanced={(newText) => {
                     setScriptText(newText);
-                    setSuccessNotice('Script enhanced with AI!');
+                    setSuccessNotice(`Script enhanced! Using locked voice: ${selectedVoice.name}.`);
                   }}
                   onError={(err) => setErrorNotice(err)}
                 />
@@ -607,14 +730,18 @@ export default function App() {
                 currentText={scriptText}
                 onTranslated={(newText, targetLang) => {
                   setScriptText(newText);
-                  if (targetLang === 'hindi') {
+                  if (isVoiceLocked) {
+                    setSuccessNotice(
+                      `Script translated into ${targetLang === 'hindi' ? 'Hindi (हिंदी)' : 'English'}! Keeping your locked voice (${selectedVoice.name}).`
+                    );
+                  } else if (targetLang === 'hindi') {
                     setVoiceFilter('hindi-male');
-                    setSelectedVoiceId('hindi-male-kabir');
-                    setSuccessNotice('Script translated into Hindi (हिंदी)! Switched to Kabir voice.');
+                    handleManualVoiceChange('indian-edu-siddharth');
+                    setSuccessNotice('Script translated into Hindi (हिंदी)!');
                   } else {
                     setVoiceFilter('english-male');
-                    setSelectedVoiceId('english-male-marcus');
-                    setSuccessNotice('Script translated into English! Switched to Marcus voice.');
+                    handleManualVoiceChange('english-male-marcus');
+                    setSuccessNotice('Script translated into English!');
                   }
                 }}
                 onError={(err) => setErrorNotice(err)}
@@ -626,18 +753,34 @@ export default function App() {
               {/* Voice Filter & Dropdown */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label htmlFor="voice-select" className="text-base text-[#1F261F] flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-[#B83848]" />
-                    <span className="font-bold-italic text-lg text-[#1F261F]">Voice</span>{' '}
-                    <span className="font-syne font-bold uppercase tracking-wider text-sm text-[#B83848]">Cast</span>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="voice-select" className="text-base text-white flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-[#FF8A98]" />
+                      <span className="font-bold-italic text-lg text-white">Voice</span>{' '}
+                      <span className="font-syne font-bold uppercase tracking-wider text-sm text-[#FF8A98]">Cast</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleVoiceLock}
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                        isVoiceLocked
+                          ? 'bg-[#2E4E3B] text-white border-emerald-400/35 shadow-2xs'
+                          : 'bg-white/10 text-white/80 border-white/20 hover:text-white'
+                      }`}
+                      title="Keep the exact same voice across all scripts until manually changed"
+                    >
+                      {isVoiceLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                      <span>{isVoiceLocked ? 'Same Voice Locked' : 'Lock Voice'}</span>
+                    </button>
+                  </div>
 
                   {/* Filter Pills */}
-                  <div className="flex items-center gap-1 bg-[#EAE3D2] p-1 rounded-full border border-[#D8CEBC] text-xs">
+                  <div className="flex items-center gap-1 bg-black/30 p-1 rounded-full border border-white/15 text-xs">
                     {(
                       [
                         { id: 'all', label: 'All' },
-                        { id: 'hindi-male', label: '🇮🇳 Hindi Male' },
+                        { id: 'hindi-male', label: '🇮🇳 Indian / Hinglish' },
                         { id: 'english-male', label: '🇺🇸 Eng Male' },
                         { id: 'female', label: 'Female' },
                       ] as const
@@ -649,7 +792,7 @@ export default function App() {
                         className={`px-3 py-1 rounded-full transition-all cursor-pointer font-semibold ${
                           voiceFilter === t.id
                             ? 'bg-[#B83848] text-white shadow-xs font-bold'
-                            : 'text-[#4A554D] hover:text-[#1F261F]'
+                            : 'text-white/75 hover:text-white'
                         }`}
                       >
                         {t.label}
@@ -662,7 +805,7 @@ export default function App() {
                   <select
                     id="voice-select"
                     value={selectedVoiceId}
-                    onChange={(e) => setSelectedVoiceId(e.target.value)}
+                    onChange={(e) => handleManualVoiceChange(e.target.value)}
                     className="w-full bg-[#F4EFE6] border-2 border-[#DFD6C7] hover:border-[#B83848] text-[#1F261F] text-base font-semibold rounded-2xl px-4 py-3.5 appearance-none focus:outline-none focus:border-[#B83848] cursor-pointer transition-all pr-12 shadow-sm font-serif-display"
                   >
                     {filteredVoiceList.map((v) => (
@@ -677,22 +820,22 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-[#5C6E60] pt-0.5">
+                <div className="flex items-center justify-between text-xs text-white/75 pt-0.5">
                   <p className="line-clamp-1 italic font-serif-display">{selectedVoice.description}</p>
-                  <span className="font-mono-numbers font-bold text-[#B83848] bg-[#B83848]/10 px-2.5 py-0.5 rounded ml-2 flex-shrink-0">
+                  <span className="font-mono-numbers font-bold text-[#FF8A98] bg-[#B83848]/20 border border-[#B83848]/35 px-2.5 py-0.5 rounded ml-2 flex-shrink-0">
                     {selectedVoice.badge || selectedVoice.accent}
                   </span>
                 </div>
               </div>
 
               {/* Emotional Mood Selection */}
-              <div className="space-y-2.5 pt-3 border-t border-[#E2DAD0]">
+              <div className="space-y-2.5 pt-3 border-t border-white/15">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold-italic text-[#1F261F] flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#B83848]" />
-                    <span>Cadence &</span> <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#B83848]">Emotion</span>
+                  <span className="text-sm font-bold-italic text-white flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#FF8A98]" />
+                    <span>Cadence &</span> <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#FF8A98]">Emotion</span>
                   </span>
-                  <span className="text-xs font-semibold italic text-[#B83848] font-serif-display">
+                  <span className="text-xs font-semibold italic text-[#FF8A98] font-serif-display">
                     {selectedEmotion.label}
                   </span>
                 </div>
@@ -704,7 +847,7 @@ export default function App() {
                       <button
                         key={em.id}
                         type="button"
-                        onClick={() => setSelectedEmotionId(em.id)}
+                        onClick={() => handleManualEmotionChange(em.id)}
                         className={`text-left px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                           isEmSelected
                             ? 'bg-[#B83848] text-white border-[#B83848] shadow-sm font-bold'
@@ -719,11 +862,11 @@ export default function App() {
               </div>
 
               {/* Speed Slider */}
-              <div className="space-y-3 pt-3 border-t border-[#E2DAD0]">
+              <div className="space-y-3 pt-3 border-t border-white/15">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="speed-slider" className="text-sm font-bold-italic text-[#1F261F] flex items-center gap-1.5">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#B83848]" />
-                    <span>Tempo &</span> <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#B83848]">Speed</span>
+                  <label htmlFor="speed-slider" className="text-sm font-bold-italic text-white flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF8A98]" />
+                    <span>Tempo &</span> <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#FF8A98]">Speed</span>
                   </label>
                   <span className="text-xs font-mono-numbers font-bold text-white bg-[#B83848] px-3 py-0.5 rounded-full shadow-xs">
                     {speed.toFixed(2)}x
@@ -737,22 +880,22 @@ export default function App() {
                   max="2.0"
                   step="0.05"
                   value={speed}
-                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  onChange={(e) => handleManualSpeedChange(parseFloat(e.target.value))}
                   className="w-full"
                 />
 
-                <div className="flex justify-between items-center text-xs text-[#5C6E60]">
+                <div className="flex justify-between items-center text-xs text-white/75">
                   <span className="font-mono-numbers">0.5x Slow</span>
                   <div className="flex items-center gap-2">
                     {[0.85, 1.0, 1.15, 1.3].map((val) => (
                       <button
                         key={val}
                         type="button"
-                        onClick={() => setSpeed(val)}
+                        onClick={() => handleManualSpeedChange(val)}
                         className={`px-3 py-1 rounded-full text-xs font-mono-numbers font-bold transition-all cursor-pointer ${
                           Math.abs(speed - val) < 0.03
                             ? 'bg-[#B83848] text-white shadow-xs'
-                            : 'bg-[#F4EFE6] hover:bg-[#EAE3D4] text-[#4A554D] border border-[#DFD6C7]'
+                            : 'bg-white/10 hover:bg-white/20 text-white/85 border border-white/15'
                         }`}
                       >
                         {val}x
@@ -847,8 +990,16 @@ export default function App() {
                   engine={activeClip.engine}
                   scriptSnippet={activeClip.text}
                   onSpeedChange={(newSpd) => {
-                    setSpeed(newSpd);
+                    handleManualSpeedChange(newSpd);
                     setActiveClip((prev) => (prev ? { ...prev, speed: newSpd } : null));
+                  }}
+                  onResynthesize={(textToRegenerate) => {
+                    setScriptText(textToRegenerate);
+                    setErrorNotice(null);
+                    setSuccessNotice(
+                      `Loaded take into editor — click "Synthesize Voiceover" to generate fresh 24kHz audio with ${selectedVoice.name}.`
+                    );
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                 />
               )}
@@ -926,10 +1077,10 @@ export default function App() {
               </div>
 
               {clipHistory.length === 0 ? (
-                <div className="py-8 text-center text-[#7A877C] space-y-2">
-                  <Disc className="w-8 h-8 mx-auto opacity-40 animate-pulse" />
+                <div className="py-8 text-center text-white/75 space-y-2">
+                  <Disc className="w-8 h-8 mx-auto opacity-50 animate-pulse" />
                   <p className="text-xs font-bold-italic">No voice takes recorded yet.</p>
-                  <p className="text-[11px] text-[#93A196]">Synthesize your script to save takes in your VibeCast reel.</p>
+                  <p className="text-[11px] text-white/55">Synthesize your script to save takes in your VibeCast reel.</p>
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">

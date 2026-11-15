@@ -19,7 +19,7 @@ export interface EmotionOption {
   id: string;
   label: string;
   description: string;
-  category: 'emotional' | 'dramatic' | 'warm' | 'calm' | 'inspiring';
+  category: 'educational' | 'emotional' | 'dramatic' | 'warm' | 'calm' | 'inspiring';
   pitchOffset: number;
   rateOffset: number;
 }

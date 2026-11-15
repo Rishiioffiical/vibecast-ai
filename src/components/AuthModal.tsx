@@ -172,12 +172,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Free Quota Banner */}
-        <div className="bg-gradient-to-r from-[#B83848]/15 via-[#FAF7EF] to-[#2E4E3B]/15 px-6 py-2.5 border-b border-[#E0D7C9] flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 font-bold text-[#8C202F]">
-            <Sparkles className="w-3.5 h-3.5 text-[#B83848]" />
+        <div className="bg-white/10 px-6 py-2.5 border-b border-white/15 flex items-center justify-between text-xs">
+          <span className="flex items-center gap-1.5 font-bold text-white">
+            <Sparkles className="w-3.5 h-3.5 text-[#FF8A98]" />
             <span>2,000 Free Daily Characters · Natural AI Voices</span>
           </span>
-          <span className="font-mono-numbers text-[10px] text-[#2E4E3B] font-bold">
+          <span className="font-mono-numbers text-[10px] text-emerald-300 font-bold">
             Resets 12 AM
           </span>
         </div>
@@ -230,18 +230,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span>Continue with Google</span>
           </button>
 
-          <div className="relative flex items-center justify-center my-2">
-            <div className="border-t border-[#DFD6C7] w-full" />
-            <span className="bg-[#FAF7EF] px-3 text-[10px] text-[#7C887E] font-medium uppercase font-mono-numbers">
+          <div className="relative flex items-center justify-center my-2 gap-3">
+            <div className="border-t border-white/15 flex-1" />
+            <span className="text-[10px] text-white/70 font-medium uppercase font-mono-numbers">
               Or with email password
             </span>
+            <div className="border-t border-white/15 flex-1" />
           </div>
 
           {/* Form with Clean Inputs (No Pre-filled Emails) */}
           <form onSubmit={handleSubmit} className="space-y-3">
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-[#1F261F] mb-1">
+                <label className="block text-xs font-semibold text-white/90 mb-1">
                   Your Name
                 </label>
                 <div className="relative">
@@ -259,7 +260,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-[#1F261F] mb-1">
+              <label className="block text-xs font-semibold text-white/90 mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -277,7 +278,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#1F261F] mb-1">
+              <label className="block text-xs font-semibold text-white/90 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -318,7 +319,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </form>
 
           {/* Toggle Sign In / Sign Up */}
-          <div className="pt-2 border-t border-[#DFD6C7] flex items-center justify-between text-xs text-[#5C6E60]">
+          <div className="pt-2 border-t border-white/15 flex items-center justify-between text-xs text-white/75">
             <span>
               {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
             </span>
@@ -328,7 +329,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setMode(mode === 'signin' ? 'signup' : 'signin');
                 setErrorMsg(null);
               }}
-              className="font-bold text-[#B83848] hover:underline cursor-pointer"
+              className="font-bold text-[#FF8A98] hover:underline cursor-pointer"
             >
               {mode === 'signin' ? 'Create Account (Sign Up)' : 'Sign In'}
             </button>

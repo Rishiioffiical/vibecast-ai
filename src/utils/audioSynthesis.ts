@@ -5,10 +5,12 @@ import { getApiHeaders } from './apiClient';
 
 export interface SynthesizeParams {
   text: string;
-  voiceName: string; // Gemini voice name, e.g. 'Charon' | 'Fenrir' | 'Puck' | 'Zephyr'
+  voiceName: string; // Gemini voice name, e.g. 'Charon' | 'Fenrir' | 'Puck' | 'Zephyr' | 'Kore'
+  voiceId?: string;
   emotion: string;
   speed: number;
   language: 'hindi' | 'english';
+  scriptMode?: 'hinglish' | 'hindi' | 'english';
 }
 
 export interface SynthesisResult {

@@ -125,6 +125,7 @@ async function runWithKeyFailover<T>(
       aiClients[key] = new GoogleGenAI({
         apiKey: key,
         httpOptions: {
+          apiVersion: 'v1beta',
           headers: {
             'User-Agent': 'aistudio-build',
           },
@@ -160,12 +161,154 @@ async function runWithKeyFailover<T>(
   throw lastError;
 }
 
-// Map emotion, language, and voice persona to detailed speech metadata style description
-function buildStylePrompt(voiceName: string, emotion: string, speed: number, language: string = 'hindi'): string {
-  const isEnglish = language === 'english' || /^[a-zA-Z0-9\s.,!?'"()-]+$/.test(language);
+// Server-side Hinglish & Script Mode Detector
+const SERVER_HINGLISH_WORDS = new Set([
+  'hai', 'hain', 'ho', 'hota', 'hoti', 'hote', 'tha', 'thi', 'the', 'hoga', 'hogi', 'honge',
+  'mein', 'mai', 'main', 'hum', 'tum', 'aap', 'aapko', 'aapka', 'aapki', 'apna', 'apni', 'apne',
+  'ka', 'ki', 'ke', 'ko', 'se', 'par', 'pe', 'aur', 'ya', 'bhi', 'toh', 'hi', 'tak', 'saath',
+  'kya', 'kaise', 'kaisa', 'kaisi', 'kyun', 'kyunki', 'kab', 'kahan', 'kaun', 'kitna', 'kitne', 'kitni',
+  'yeh', 'ye', 'woh', 'wo', 'iska', 'uska', 'iske', 'uske', 'isko', 'usko',
+  'aaj', 'kal', 'ab', 'abhi', 'phir', 'fir', 'jab', 'tab', 'agar', 'magar', 'lekin', 'parantu', 'isliye',
+  'nahi', 'nahin', 'mat', 'haan', 'ji', 'bilkul', 'zaroor', 'shayad', 'lagbhag', 'sirf', 'bas',
+  'doston', 'dosto', 'mitron', 'bhai', 'log', 'logon', 'sab', 'sabhi', 'kuch', 'koi', 'har', 'ek', 'do', 'teen',
+  'dekhiye', 'dekho', 'dekhte', 'samajh', 'samjhe', 'samajhte', 'samjhenge', 'jaante', 'jaano', 'sikhenge',
+  'baat', 'baatein', 'karenge', 'karte', 'karta', 'karti', 'karo', 'karna', 'kiya', 'kiye', 'hui', 'hua',
+  'chaliye', 'chalo', 'shuru', 'batate', 'batao', 'bataunga', 'bataungi', 'jaankari',
+  'bahut', 'bohot', 'zyada', 'jyada', 'accha', 'achha', 'acchi', 'bada', 'badi', 'bade', 'naya', 'nayi',
+  'desh', 'bharat', 'duniya', 'zindagi', 'waqt', 'samay', 'paisa', 'paise', 'kaam', 'sarkar', 'padhai',
+  'tarah', 'tareeka', 'tareeke', 'mudda', 'sawal', 'jawab', 'matlab', 'jaise', 'waise', 'aise', 'aisi', 'aisa',
+  'baare', 'bare', 'andar', 'bahar', 'upar', 'neeche', 'pehle', 'baad', 'namaskar', 'namaste', 'hamari', 'hamare',
+]);
+
+// Fast fallback dictionary for unambiguous Hinglish words -> Devanagari so Indian pronunciation is guaranteed
+const HINGLISH_DEVANAGARI_FALLBACK: Record<string, string> = {
+  namaskar: 'नमस्कार', namaste: 'नमस्ते', doston: 'दोस्तों', dosto: 'दोस्तों', mitron: 'मित्रों',
+  aaj: 'आज', kal: 'कल', abhi: 'अभी', hum: 'हम', aap: 'आप', aapko: 'आपको', aapka: 'आपका', aapki: 'आपकी',
+  mein: 'में', mai: 'मैं', hai: 'है', hain: 'हैं', hota: 'होता', hoti: 'होती', hote: 'होते',
+  tha: 'था', thi: 'थी', hoga: 'होगा', hogi: 'होगी', honge: 'होंगे',
+  ka: 'का', ki: 'की', ke: 'के', ko: 'को', se: 'से', aur: 'और', bhi: 'भी',
+  toh: 'तो', tak: 'तक', saath: 'साथ', kya: 'क्या', kaise: 'कैसे', kyun: 'क्यों', kyunki: 'क्योंकि',
+  kab: 'कब', kahan: 'कहाँ', kaun: 'कौन', kitna: 'कितना', kitne: 'कितने', kitni: 'कितनी',
+  yeh: 'यह', ye: 'ये', woh: 'वह', wo: 'वो', iska: 'इसका', uska: 'उसका', iske: 'इसके', uske: 'उसके',
+  agar: 'अगर', magar: 'मगर', lekin: 'लेकिन', isliye: 'इसलिए', nahi: 'नहीं', nahin: 'नहीं', haan: 'हाँ',
+  bilkul: 'बिल्कुल', zaroor: 'ज़रूर', sirf: 'सिर्फ़', sab: 'सब', sabhi: 'सभी', kuch: 'कुछ', koi: 'कोई',
+  ek: 'एक', teen: 'तीन', dekhiye: 'देखिए', dekho: 'देखो',
+  samajh: 'समझ', samjhe: 'समझे', samajhte: 'समझते', samjhenge: 'समझेंगे', jaante: 'जानते', sikhenge: 'सीखेंगे',
+  baat: 'बात', karenge: 'करेंगे', karte: 'करते', karta: 'करता', karti: 'करती', karo: 'करो', karna: 'करना',
+  kiya: 'किया', chaliye: 'चलिए', chalo: 'चलो', shuru: 'शुरू', bahut: 'बहुत', bohot: 'बहुत', zyada: 'ज़्यादा', jyada: 'ज़्यादा',
+  accha: 'अच्छा', achha: 'अच्छा', bada: 'बड़ा', badi: 'बड़ी', bade: 'बड़े', naya: 'नया', nayi: 'नयी',
+  desh: 'देश', bharat: 'भारत', duniya: 'दुनिया', zindagi: 'ज़िंदगी', waqt: 'वक़्त', samay: 'समय',
+  kaam: 'काम', tarah: 'तरह', tareeka: 'तरीका', tareeke: 'तरीके', mudda: 'मुद्दा', sawal: 'सवाल', jawab: 'जवाब',
+  matlab: 'मतलब', jaise: 'जैसे', waise: 'वैसे', aise: 'ऐसे', baare: 'बारे',
+  pehle: 'पहले', baad: 'बाद', hamari: 'हमारी', hamare: 'हमारे', hamara: 'हमारा', apna: 'अपना', apni: 'अपनी', apne: 'अपने',
+  peeche: 'पीछे', gehra: 'गहरा', jab: 'जब', tab: 'तब',
+};
+
+function detectServerScriptMode(text: string): 'hinglish' | 'hindi' | 'english' {
+  const clean = text.trim();
+  const devanagariCount = (clean.match(/[\u0900-\u097F]/g) || []).length;
+  const words = clean
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 2);
+
+  let hinglishHits = 0;
+  for (const w of words) {
+    if (SERVER_HINGLISH_WORDS.has(w)) {
+      hinglishHits++;
+    }
+  }
+
+  if (devanagariCount > 8 && devanagariCount >= words.length * 1.2) {
+    return 'hindi';
+  }
+
+  const ratio = words.length > 0 ? hinglishHits / words.length : 0;
+  if (hinglishHits >= 2 || ratio >= 0.12 || (devanagariCount > 0 && words.length > 0)) {
+    return 'hinglish';
+  }
+
+  return 'english';
+}
+
+function applyDictionaryHinglishFallback(text: string): string {
+  return text.replace(/\b([a-zA-Z]+)\b/g, (match) => {
+    const lower = match.toLowerCase();
+    return HINGLISH_DEVANAGARI_FALLBACK[lower] || match;
+  });
+}
+
+/**
+ * Converts Romanized Hindi (Hinglish) script into phonetically accurate Devanagari + Indian English
+ * so Gemini TTS speaks with an authentic, crystal-clear Indian Educational accent instead of a Western/robotic accent.
+ */
+async function prepareHinglishForIndianTts(ai: GoogleGenAI, text: string): Promise<string> {
+  try {
+    const prompt = `Convert the following Hinglish (Romanized Hindi mixed with English) script into clean Devanagari script for phonetic Indian accent text-to-speech synthesis.
+CRITICAL RULES:
+1. DO NOT translate or change any word's meaning or word order! Keep the exact same spoken words.
+2. Transliterate Hindi words written in the English alphabet into pure Devanagari (e.g., "Namaskar doston aaj ke is video mein hum samjhenge" -> "नमस्कार दोस्तों आज के इस वीडियो में हम समझेंगे").
+3. For English technical/modern words (e.g., Artificial Intelligence, Quantum Computing, Economy, Technology, Concept, Step by Step), keep them natural or in clean Indian Devanagari phonetics so an Indian educator pronounces every word in a crystal-clear Indian accent.
+4. Preserve all punctuation (commas, periods, question marks, exclamation marks) for natural human breathing pauses.
+5. Output ONLY the converted script text—no quotes, no explanations.
+
+Input Hinglish Script:
+${text}`;
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Hinglish phonetic pass timed out')), 6500)
+    );
+
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt,
+      }),
+      timeoutPromise,
+    ]);
+
+    let converted = response.text?.trim() || '';
+    if (converted.startsWith('"') && converted.endsWith('"')) {
+      converted = converted.slice(1, -1).trim();
+    }
+    return converted || applyDictionaryHinglishFallback(text);
+  } catch (err) {
+    console.warn('Hinglish phonetic pass skipped/fallback used:', (err as Error)?.message || err);
+    return applyDictionaryHinglishFallback(text);
+  }
+}
+
+// Map emotion, language, scriptMode, and voice persona to detailed speech metadata style description
+function buildStylePrompt(
+  voiceName: string,
+  emotion: string,
+  speed: number,
+  language: string = 'hindi',
+  scriptMode: 'hinglish' | 'hindi' | 'english' = 'hindi',
+  voiceId: string = ''
+): string {
+  const isEducational =
+    emotion === 'educational-clear' ||
+    voiceId.startsWith('indian-edu-') ||
+    scriptMode === 'hinglish';
+
+  const paceNote =
+    speed < 0.9
+      ? 'Deliver at a calm, measured, deliberate teaching pace with clear pauses between concepts.'
+      : speed > 1.15
+      ? 'Deliver at an engaging, crisp, articulate pace with crystal-clear syllable separation.'
+      : 'Deliver at a natural, steady human educator pace with organic breath pauses.';
+
+  if (isEducational) {
+    return `Authentic, crystal-clear Indian educator and documentary explainer voice (${voiceName}) with a natural, educated Indian accent (en-IN / hi-IN). Speak like a real human teacher explaining concepts clearly—crisp consonant articulation, warm studio close-mic presence, natural human breathing pauses, and genuine intellectual curiosity. Pronounce Hindi and Hinglish words with native Indian phonetics and English terms with a clean, articulate Indian accent. Maintain 100% consistent vocal identity and timbre. Strictly avoid any robotic, monotonous, or synthetic AI cadence. ${paceNote}`;
+  }
+
+  const isEnglish = scriptMode === 'english' && language === 'english';
 
   if (isEnglish) {
     const englishStyles: Record<string, string> = {
+      'educational-clear': 'Crystal-clear, articulate Indian English educator and documentary narrator with crisp diction and natural human cadence.',
       'emotional-deep': 'Deep, soulful, and introspective male voice with natural cadence, heartfelt pauses, and resonant vocal warmth.',
       'emotional-dramatic': 'Cinematic, intense, and commanding deep baritone theatrical narrator with powerful presence and dynamic range.',
       'emotional-poetic': 'Warm, charismatic, and conversational male voice with natural phrasing, engaging rhythm, and smooth delivery.',
@@ -173,32 +316,37 @@ function buildStylePrompt(voiceName: string, emotion: string, speed: number, lan
       'emotional-inspiring': 'Confident, motivational, and passionate speaker with uplifting energy and articulate clarity.',
     };
 
-    const base = englishStyles[emotion] || englishStyles['emotional-deep'];
-    const pace = speed < 0.9 ? 'Delivered with thoughtful, deliberate pauses.' :
-                 speed > 1.2 ? 'Delivered at a crisp, energetic pace.' : 'Delivered at a natural conversational pace.';
-    return `${base} ${pace} Sound completely natural, expressive, and human-like without robotic cadence.`;
+    const base = englishStyles[emotion] || englishStyles['educational-clear'];
+    return `${base} ${paceNote} Sound completely natural, crystal-clear, and human-like without robotic AI cadence.`;
   }
 
-  // Hindi Styles
+  // Hindi & Hinglish Styles (Always authentic Indian accent & crystal-clear studio diction)
   const hindiStyles: Record<string, string> = {
-    'emotional-deep': 'Deep, soulful, and emotionally moving Hindi male voice with expressive pauses, poignant resonance, and heartfelt cadence.',
-    'emotional-dramatic': 'Dramatic, intense, and passionate Hindi male theatrical narrator voice with powerful dynamics and cinematic depth.',
-    'emotional-poetic': 'Poetic, gentle, and reflective Hindi male voice with soulful warmth, nuanced articulation, and artistic sentiment (शायराना अंदाज).',
-    'emotional-melancholy': 'Mellow, nostalgic, and melancholic Hindi male voice with tender emotion, quiet introspection, and subdued grief.',
-    'emotional-inspiring': 'Inspirational, motivational, and confident Hindi male speaker voice filled with passion, strength, and uplifting energy.',
+    'educational-clear': 'Crystal-clear, articulate Indian educator and explainer voice (Hindi & Hinglish) with crisp studio diction, natural human breath pauses, and zero robotic AI tone.',
+    'emotional-deep': 'Deep, soulful, and emotionally moving Indian Hindi voice with crystal-clear diction, expressive pauses, poignant resonance, and heartfelt human cadence.',
+    'emotional-dramatic': 'Dramatic, intense, and commanding Indian Hindi theatrical narrator voice with crystal-clear articulation and cinematic depth.',
+    'emotional-poetic': 'Poetic, warm, and conversational Indian Hindi voice with soulful clarity, nuanced articulation, and natural human flow.',
+    'emotional-melancholy': 'Mellow, nostalgic, and tender Indian Hindi voice with gentle human breathing and clear, intimate studio presence.',
+    'emotional-inspiring': 'Inspirational, motivational, and confident Indian Hindi speaker voice filled with clarity, conviction, and uplifting human energy.',
   };
 
-  const styleBase = hindiStyles[emotion] || hindiStyles['emotional-deep'];
-  const speedNote = speed < 0.9 ? 'Spoken at a deliberate, slow, emotional pace.' :
-                    speed > 1.2 ? 'Spoken at a brisk, energetic pace.' : 'Spoken at a natural, measured pace.';
-
-  return `${styleBase} ${speedNote} Pronounce words with authentic natural inflection and expressive human prosody.`;
+  const styleBase = hindiStyles[emotion] || hindiStyles['educational-clear'];
+  return `${styleBase} ${paceNote} Pronounce every word with authentic Indian inflection, crystal-clear studio articulation, and natural human prosody.`;
 }
 
 // POST /api/tts - Synthesize speech using Gemini TTS (gemini-3.8-flash-lite-tts free tier model)
 app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response) => {
   try {
-    const { text, voice = 'Charon', emotion = 'emotional-deep', speed = 1.0, language = 'hindi' } = req.body;
+    const {
+      text,
+      voice,
+      voiceName,
+      voiceId = '',
+      emotion = 'educational-clear',
+      speed = 1.0,
+      language = 'hindi',
+      scriptMode: clientScriptMode,
+    } = req.body;
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'Text script is required.', code: 'INVALID_INPUT' });
@@ -213,16 +361,41 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
     }
 
     const safeSpeed = Math.min(2.0, Math.max(0.5, Number(speed) || 1.0));
-    const allowedEmotions = ['emotional-deep', 'emotional-dramatic', 'emotional-poetic', 'emotional-melancholy', 'emotional-inspiring'];
-    const safeEmotion = allowedEmotions.includes(emotion) ? emotion : 'emotional-deep';
+    const allowedEmotions = [
+      'educational-clear',
+      'emotional-deep',
+      'emotional-dramatic',
+      'emotional-poetic',
+      'emotional-melancholy',
+      'emotional-inspiring',
+    ];
+    const safeEmotion = allowedEmotions.includes(emotion) ? emotion : 'educational-clear';
 
+    // Strictly honor the locked voiceName or voice sent by the client
+    const requestedVoice = voiceName || voice || 'Charon';
     const allowedVoices = ['Charon', 'Fenrir', 'Puck', 'Zephyr', 'Kore', 'Aoede'];
-    const chosenVoice = allowedVoices.includes(voice) ? voice : 'Charon';
+    const chosenVoice = allowedVoices.includes(requestedVoice) ? requestedVoice : 'Charon';
 
-    const styleInstruction = buildStylePrompt(chosenVoice, safeEmotion, safeSpeed, language);
+    // Auto-recognize script mode (hinglish, hindi, or english)
+    const detectedMode = clientScriptMode || detectServerScriptMode(cleanText);
+
+    const styleInstruction = buildStylePrompt(
+      chosenVoice,
+      safeEmotion,
+      safeSpeed,
+      language,
+      detectedMode,
+      voiceId
+    );
 
     // Call Gemini 3.8 Flash Lite TTS with automatic multi-key failover
     const result = await runWithKeyFailover(req, async (ai) => {
+      // If script is Hinglish, phonetically anchor Roman Hindi words to Devanagari for authentic Indian accent
+      const textForSynthesis =
+        detectedMode === 'hinglish'
+          ? await prepareHinglishForIndianTts(ai, cleanText)
+          : cleanText;
+
       let response;
       try {
         response = await ai.models.generateContent({
@@ -232,7 +405,7 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
               role: 'user',
               parts: [
                 {
-                  text: cleanText,
+                  text: textForSynthesis,
                   speechMetadata: {
                     style: styleInstruction,
                   },
@@ -260,7 +433,7 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
               role: 'user',
               parts: [
                 {
-                  text: cleanText,
+                  text: textForSynthesis,
                 },
               ],
             },
@@ -286,7 +459,7 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
       }
 
       const mimeType = candidatePart?.inlineData?.mimeType || 'audio/wav';
-      return { base64Audio, mimeType };
+      return { base64Audio, mimeType, detectedMode };
     });
 
     return res.json({
@@ -295,6 +468,7 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
       voice: chosenVoice,
       emotion: safeEmotion,
       speed: safeSpeed,
+      scriptMode: result.detectedMode,
       timestamp: Date.now(),
     });
   } catch (error: any) {
@@ -369,21 +543,11 @@ app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Re
 
     const result = await runWithKeyFailover(req, async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `${selectedInstruction}\n\nOriginal Text:\n${text}\n\nIMPORTANT: Return ONLY the rewritten Hindi script in clean Devanagari, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`,
-              },
-            ],
-          },
-        ],
+        model: 'gemini-4-hydrogen',
+        contents: `${selectedInstruction}\n\nOriginal Text:\n${text}\n\nIMPORTANT: Return ONLY the rewritten script, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`,
         config: {
           systemInstruction:
-            'You are an award-winning Indian cinematic scriptwriter and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.',
-          temperature: 0.8,
+            'You are an award-winning Indian cinematic scriptwriter, educator, and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.',
         },
       });
       return response.text?.trim() || text;
@@ -472,13 +636,12 @@ Rules:
 
     const result = await runWithKeyFailover(req, async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
           systemInstruction:
             'You are an award-winning documentary & podcast voiceover scriptwriter. You always ground your scripts in real, up-to-date facts retrieved via Google Search and write clean spoken narration ready for studio TTS.',
-          temperature: 0.7,
         },
       });
 
@@ -505,7 +668,7 @@ Rules:
   }
 });
 
-// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-3.8-flash + Google Search Grounding
+// POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-4-hydrogen + Google Search Grounding
 app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Response) => {
   try {
     const { messages = [] } = req.body;
@@ -521,19 +684,38 @@ app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Respo
     }));
 
     const result = await runWithKeyFailover(req, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: formattedContents,
-        config: {
-          tools: [{ googleSearch: {} }],
-          systemInstruction:
-            'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi & English scriptwriter, documentary researcher, poet, and voice direction consultant. You have live Google Search access to ground scripts in real-time news, facts, history, sports, science, and current events. Assist users in writing emotional Shayaris, dramatic dialogues, and factual podcast/documentary scripts tailored for text-to-speech voices.',
-          temperature: 0.7,
-        },
-      });
-      const reply = response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।';
-      const { sources, searchQueries } = extractGroundingSources(response);
-      return { reply, sources, searchQueries };
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: formattedContents,
+          config: {
+            tools: [{ googleSearch: {} }],
+            systemInstruction:
+              'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi, Hinglish & English scriptwriter, documentary researcher, poet, and voice direction consultant. You have live Google Search access to ground scripts in real-time news, facts, history, sports, science, and current events. Assist users in writing emotional Shayaris, dramatic dialogues, and factual podcast/documentary scripts tailored for text-to-speech voices.',
+          },
+        });
+        const reply = response.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।';
+        const { sources, searchQueries } = extractGroundingSources(response);
+        return { reply, sources, searchQueries };
+      } catch (primaryErr: any) {
+        const msg = `${primaryErr?.message || ''}`;
+        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+          const fallbackResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-lite',
+            contents: formattedContents,
+            config: {
+              systemInstruction:
+                'You are Vani AI Studio Assistant (वाणी सहायक), an expert Hindi, Hinglish & English scriptwriter, documentary researcher, poet, and voice direction consultant. Assist users in writing emotional Shayaris, dramatic dialogues, and clear educational/podcast scripts tailored for text-to-speech voices.',
+            },
+          });
+          return {
+            reply: fallbackResponse.text?.trim() || 'माफ़ कीजिए, कोई उत्तर प्राप्त नहीं हुआ।',
+            sources: [],
+            searchQueries: [],
+          };
+        }
+        throw primaryErr;
+      }
     });
 
     return res.json({
@@ -590,20 +772,8 @@ Rules:
 
     const translatedText = await runWithKeyFailover(req, async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${text}\n\n=== TRANSLATED OUTPUT ONLY ===`,
-              },
-            ],
-          },
-        ],
-        config: {
-          temperature: 0.25,
-        },
+        model: 'gemini-4-hydrogen',
+        contents: `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${text}\n\n=== TRANSLATED OUTPUT ONLY ===`,
       });
 
       let out = response.text?.trim() || '';

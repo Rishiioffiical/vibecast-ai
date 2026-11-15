@@ -72,13 +72,13 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
   };
 
   return (
-    <div className="pt-3.5 border-t border-[#E2DAD0] space-y-2.5">
+    <div className="pt-3.5 border-t border-white/15 space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Languages className="w-4 h-4 text-[#B83848]" />
-          <span className="text-sm text-[#1F261F]">
-            <span className="font-bold-italic text-sm text-[#1F261F]">Bilingual</span>{' '}
-            <span className="font-syne font-bold uppercase tracking-wider text-[11px] text-[#B83848]">
+          <Languages className="w-4 h-4 text-[#FF8A98]" />
+          <span className="text-sm text-white">
+            <span className="font-bold-italic text-sm text-white">Bilingual</span>{' '}
+            <span className="font-syne font-bold uppercase tracking-wider text-[11px] text-[#FF8A98]">
               Voice Translator
             </span>
           </span>

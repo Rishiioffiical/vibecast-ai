@@ -89,18 +89,18 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {/* User Info Header */}
-          <div className="pb-2 border-b border-[#E2DAD0] space-y-0.5">
+          <div className="pb-2 border-b border-white/15 space-y-0.5">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-[#1F261F] truncate">
+              <p className="text-xs font-bold text-white truncate">
                 {userProfile.displayName}
               </p>
               {isAdmin && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/40">
                   Admin
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-[#6A786E] font-mono-numbers truncate">
+            <p className="text-[11px] text-white/70 font-mono-numbers truncate">
               {userProfile.email}
             </p>
           </div>
@@ -205,7 +205,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
               setDropdownOpen(false);
               await signOut();
             }}
-            className="w-full py-1.5 px-3 rounded-xl hover:bg-[#F2ECE0] text-[#8C202F] text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer border border-transparent hover:border-[#DFD6C7]"
+            className="w-full py-1.5 px-3 rounded-xl hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer border border-white/10 hover:border-rose-400/35"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>

@@ -31,6 +31,7 @@ interface AudioPlayerProps {
   engine: 'gemini' | 'browser-fallback';
   scriptSnippet: string;
   onSpeedChange?: (speed: number) => void;
+  onResynthesize?: (text: string) => void;
 }
 
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -40,6 +41,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   speedMultiplier,
   scriptSnippet,
   onSpeedChange,
+  onResynthesize,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -53,6 +55,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportedBadge, setExportedBadge] = useState<string | null>(null);
+  const [audioLoadError, setAudioLoadError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +65,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setAudioLoadError(null);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -98,9 +102,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   const togglePlay = () => {
     const el = audioRef.current;
-    if (!el) return;
+    if (!el || audioLoadError) return;
     if (el.paused) {
-      el.play().catch((err) => console.warn('Audio play error:', err));
+      el.play().catch((err) => {
+        console.warn('Audio play error:', err);
+        setAudioLoadError('Saved audio session expired. Click Re-Synthesize to regenerate fresh 24kHz audio.');
+      });
     } else {
       el.pause();
     }
@@ -108,10 +115,13 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   const handleRestart = () => {
     const el = audioRef.current;
-    if (!el) return;
+    if (!el || audioLoadError) return;
     el.currentTime = 0;
     setCurrentTime(0);
-    el.play().catch((err) => console.warn('Audio restart error:', err));
+    el.play().catch((err) => {
+      console.warn('Audio restart error:', err);
+      setAudioLoadError('Saved audio session expired. Click Re-Synthesize to regenerate fresh 24kHz audio.');
+    });
   };
 
   const handleSkipTime = (seconds: number) => {
@@ -152,11 +162,15 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
     setShowExportMenu(false);
     setShowOptions(false);
+    if (audioLoadError) return;
     setIsExporting(true);
     try {
       await exportAudioInFormat(audioUrl, targetFormat, scriptSnippet, speedMultiplier);
       setExportedBadge(targetFormat.toUpperCase());
       setTimeout(() => setExportedBadge(null), 2500);
+    } catch (err) {
+      console.warn('Export error:', err);
+      setAudioLoadError('Temporary audio link expired. Re-synthesize to export.');
     } finally {
       setIsExporting(false);
     }
@@ -200,12 +214,17 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         }}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => {
+          setAudioLoadError(null);
           const dur = e.currentTarget.duration;
           if (Number.isFinite(dur)) {
             setDuration(dur);
           }
           e.currentTarget.playbackRate = speedMultiplier;
           e.currentTarget.volume = isMuted ? 0 : volume;
+        }}
+        onError={() => {
+          setIsPlaying(false);
+          setAudioLoadError('Temporary audio link from a past browser session expired. Re-synthesize to play or export.');
         }}
       />
 
@@ -380,25 +399,40 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
                 <span>-{formatTime(remainingSeconds)}</span>
               </div>
             </div>
+
+            {audioLoadError && (
+              <div className="mt-3 p-3 rounded-2xl bg-rose-500/15 border border-rose-400/35 text-xs text-rose-100 flex flex-wrap items-center justify-between gap-2">
+                <span>{audioLoadError}</span>
+                {onResynthesize && (
+                  <button
+                    type="button"
+                    onClick={() => onResynthesize(scriptSnippet)}
+                    className="px-3 py-1 rounded-full bg-[#B83848] hover:bg-[#9E2A3B] text-white font-bold text-[11px] cursor-pointer transition-colors"
+                  >
+                    Re-Synthesize Take
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* Script Mode */
           <div className="py-2 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#E2DAD0]">
-              <span className="text-xs uppercase font-mono tracking-wider font-bold text-[#78857B]">
+            <div className="flex items-center justify-between pb-2 border-b border-white/15">
+              <span className="text-xs uppercase font-mono tracking-wider font-bold text-white/65">
                 Script Transcribed Text
               </span>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-xs font-semibold text-[#B83848] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-semibold text-[#FF8A98] hover:underline flex items-center gap-1 cursor-pointer"
               >
-                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
                 <span>{isCopied ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
             <div className="max-h-64 overflow-y-auto pr-2">
-              <p className="text-base sm:text-lg font-serif-display leading-relaxed text-[#1C221D] whitespace-pre-wrap">
+              <p className="text-base sm:text-lg font-serif-display leading-relaxed text-white/95 whitespace-pre-wrap">
                 {scriptSnippet}
               </p>
             </div>
