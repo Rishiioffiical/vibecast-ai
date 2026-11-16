@@ -32,7 +32,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
         className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-[var(--accent-color)] hover:opacity-95 text-white text-xs font-semibold transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0"
       >
         <User className="w-3.5 h-3.5 text-white" />
-        <span>Sign In · 2,000 Free Chars</span>
+        <span>Studio Pass · 2,000 Chars</span>
       </button>
     );
   }
@@ -177,9 +177,9 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
             >
               <span className="flex items-center gap-1.5">
                 <Crown className="w-3.5 h-3.5 text-amber-200" />
-                <span>Unlimited UPI Upgrade</span>
+                <span>Studio Quota &amp; Pro Info</span>
               </span>
-              <span className="text-[10px] font-mono-numbers">7571889019@ybl</span>
+              <span className="text-[10px] font-mono-numbers">Refill</span>
             </button>
           )}
 

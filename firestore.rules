@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Safety Net: Default-deny catch-all prevents any unauthorized reads or writes
+    // Pillar 0: Global Safety Net — Default-deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
@@ -16,11 +16,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Role-based Access Control: Verified system admin accounts
+    // Role-based Access Control: Strictly requires email_verified == true to prevent email spoofing
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email in ['dubeyrishi135@gmail.com', 'rdpandit913@gmail.com']
-      );
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['dubeyrishi135@gmail.com', 'rdpandit913@gmail.com'];
     }
 
     function isValidId(id) {
@@ -35,10 +35,25 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Validation Blueprint for User Profiles
+    // Validation Blueprint for User Profiles (Strict keys, types, and size bounds)
     function isValidUserProfile(data) {
-      return data.id is string && data.id.size() <= 128
-        && data.email is string && data.email.size() <= 256
+      return data.keys().hasAll(['id', 'email', 'credits'])
+        && data.keys().hasOnly([
+          'id',
+          'email',
+          'displayName',
+          'credits',
+          'totalGeneratedChars',
+          'totalTakes',
+          'isPremium',
+          'createdAt',
+          'lastLoginAt',
+          'lastResetDate',
+          'lastBonusClaimDate'
+        ])
+        && data.id == request.auth.uid
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 256
         && data.credits is number && data.credits >= 0 && data.credits <= 10000000
         && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
         && (!('isPremium' in data) || (data.isPremium is bool))
@@ -50,28 +65,49 @@ service cloud.firestore {
         && (!('lastBonusClaimDate' in data) || (data.lastBonusClaimDate is string && data.lastBonusClaimDate.size() <= 32));
     }
 
-    // Validation Blueprint for Voice Takes
+    // Validation Blueprint for Voice Takes (Strict keys, types, and size bounds)
     function isValidVoiceTake(data, targetUserId) {
-      return data.id is string && data.id.size() <= 128
+      return data.keys().hasAll(['id', 'userId', 'text', 'voiceName', 'createdAt'])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'title',
+          'text',
+          'audioUrl',
+          'voiceName',
+          'language',
+          'emotionLabel',
+          'speed',
+          'duration',
+          'charCount',
+          'creditsUsed',
+          'createdAt'
+        ])
+        && data.userId == request.auth.uid
         && data.userId == targetUserId
-        && data.text is string && data.text.size() <= 10000
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 10000
+        && data.voiceName is string && data.voiceName.size() > 0 && data.voiceName.size() <= 128
+        && data.createdAt is number && data.createdAt > 0
         && (!('title' in data) || (data.title is string && data.title.size() <= 256))
-        && (!('voiceName' in data) || (data.voiceName is string && data.voiceName.size() <= 128))
+        && (!('audioUrl' in data) || (data.audioUrl is string && data.audioUrl.size() <= 2048))
         && (!('language' in data) || (data.language is string && data.language.size() <= 32))
-        && (!('emotionLabel' in data) || (data.emotionLabel is string && data.emotionLabel.size() <= 64))
+        && (!('emotionLabel' in data) || (data.emotionLabel is string && data.emotionLabel.size() <= 128))
         && (!('speed' in data) || (data.speed is number && data.speed >= 0.25 && data.speed <= 4.0))
-        && (!('duration' in data) || (data.duration is number && data.duration >= 0))
-        && (!('createdAt' in data) || (data.createdAt is number || data.createdAt is string));
+        && (!('duration' in data) || (data.duration is number && data.duration >= 0 && data.duration <= 7200))
+        && (!('charCount' in data) || (data.charCount is number && data.charCount >= 0 && data.charCount <= 10000))
+        && (!('creditsUsed' in data) || (data.creditsUsed is number && data.creditsUsed >= 0 && data.creditsUsed <= 10000));
     }
 
-    // Connection testing endpoint for boot check
+    // Connection testing endpoint for boot check (single document get only)
     match /test/connection {
-      allow read: if true;
+      allow get: if true;
+      allow list, write: if false;
     }
 
-    // User Accounts & Quota Protection
+    // User Accounts & Quota Protection (PII Isolated to Owner or Verified Admin)
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      allow get: if (isOwner(userId) && isValidId(userId)) || isAdmin();
       allow list: if isAdmin();
 
       // Create: Normal creators cannot self-assign premium status or credits higher than 2,000 limit
@@ -80,39 +116,74 @@ service cloud.firestore {
         && isValidUserProfile(incoming())
         && (isAdmin() || (incoming().isPremium == false && incoming().credits <= 2000));
 
-      // Update: Anti-tamper constraint prevents public creators from arbitrarily boosting credits or setting isPremium
+      // Action-Based Update with strict affectedKeys().hasOnly() and immutable identity fields
       allow update: if isOwner(userId)
         && isValidId(userId)
         && isValidUserProfile(incoming())
-        && (isAdmin() || (
+        && incoming().id == existing().id
+        && incoming().email == existing().email
+        && (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName',
+          'credits',
+          'totalGeneratedChars',
+          'totalTakes',
+          'isPremium',
+          'lastLoginAt',
+          'lastResetDate',
+          'lastBonusClaimDate'
+        ])
+        && (
+          isAdmin()
+          || (
             incoming().isPremium == existing().isPremium
-            && incoming().id == existing().id
             && (
-              // Standard deduction on take generation (credits only decrease or stay same)
+              // Action 1: Standard credit deduction or profile activity sync
               incoming().credits <= existing().credits
-              // OR: Official Daily Reset at 12:00 AM / new calendar date (resets back to max 2,000 allowance)
-              || (incoming().credits <= 2000 && (!('lastResetDate' in existing()) || incoming().lastResetDate != existing().lastResetDate))
+              // Action 2: Daily Reset at 12:00 AM / new calendar date (resets back to max 2,000 allowance)
+              || (
+                incoming().credits <= 2000
+                && (!('lastResetDate' in existing()) || incoming().lastResetDate != existing().lastResetDate)
+              )
             )
-          ));
+          )
+        );
 
-      allow delete: if isOwner(userId) || isAdmin();
+      allow delete: if (isOwner(userId) && isValidId(userId)) || isAdmin();
 
-      // Audio Takes Subcollection
+      // Audio Takes Subcollection (Protected by Master Gate parent check & Query Enforcer)
       match /takes/{takeId} {
-        allow read: if isOwner(userId) || isAdmin();
+        allow get: if (isOwner(userId) && isValidId(userId) && isValidId(takeId)) || isAdmin();
+        allow list: if (isOwner(userId) && existing().userId == request.auth.uid) || isAdmin();
 
         allow create: if isOwner(userId)
           && isValidId(userId)
           && isValidId(takeId)
-          && isValidVoiceTake(incoming(), userId);
+          && isValidVoiceTake(incoming(), userId)
+          && exists(/databases/$(database)/documents/users/$(userId));
 
         allow update: if isOwner(userId)
           && isValidId(userId)
           && isValidId(takeId)
+          && isValidVoiceTake(incoming(), userId)
+          && incoming().id == existing().id
           && incoming().userId == existing().userId
-          && isValidVoiceTake(incoming(), userId);
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'text',
+            'audioUrl',
+            'voiceName',
+            'language',
+            'emotionLabel',
+            'speed',
+            'duration',
+            'charCount',
+            'creditsUsed'
+          ])
+          && exists(/databases/$(database)/documents/users/$(userId));
 
-        allow delete: if isOwner(userId) || isAdmin();
+        allow delete: if (isOwner(userId) && isValidId(userId) && isValidId(takeId)) || isAdmin();
       }
     }
   }

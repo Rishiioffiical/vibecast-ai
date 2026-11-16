@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { motion } from 'motion/react';
 import {
   Volume2,
@@ -18,8 +18,6 @@ import {
   ChevronRight,
   BookOpen,
   Crown,
-  Mail,
-  QrCode,
   Palette,
   Type,
   Lock,
@@ -27,6 +25,8 @@ import {
   GraduationCap,
   Layers,
   Clock,
+  ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { ALL_VOICES, EMOTIONS, SAMPLE_SCRIPTS } from './data/voices';
 import { GeneratedClip, SampleScript } from './types';
@@ -36,20 +36,33 @@ import {
 } from './utils/audioSynthesis';
 import { recognizeScript } from './utils/scriptRecognition';
 import { getActiveApiMode, subscribeApiMode, ApiMode } from './utils/apiClient';
-import { AcousticFieldCanvas } from './components/AcousticFieldCanvas';
 import { AudioPlayer } from './components/AudioPlayer';
 import { AudioTranscriber } from './components/AudioTranscriber';
 import { AiScriptEnhancer } from './components/AiScriptEnhancer';
 import { ScriptTranslator } from './components/ScriptTranslator';
 import { DailyQuotaTracker } from './components/DailyQuotaTracker';
-import { PremiumModal } from './components/PremiumModal';
-import { AuthModal } from './components/AuthModal';
 import { UserAccountBadge } from './components/UserAccountBadge';
-import { AiChatAssistant } from './components/AiChatAssistant';
-import { AdminKeyModal } from './components/AdminKeyModal';
-import { ThemeCustomizerModal } from './components/ThemeCustomizerModal';
 import { useAuth, PUBLIC_SIGNUP_CHAR_LIMIT, getLocalDateString } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
+
+const AcousticFieldCanvas = lazy(() =>
+  import('./components/AcousticFieldCanvas').then((m) => ({ default: m.AcousticFieldCanvas }))
+);
+const PremiumModal = lazy(() =>
+  import('./components/PremiumModal').then((m) => ({ default: m.PremiumModal }))
+);
+const AuthModal = lazy(() =>
+  import('./components/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+const AiChatAssistant = lazy(() =>
+  import('./components/AiChatAssistant').then((m) => ({ default: m.AiChatAssistant }))
+);
+const AdminKeyModal = lazy(() =>
+  import('./components/AdminKeyModal').then((m) => ({ default: m.AdminKeyModal }))
+);
+const ThemeCustomizerModal = lazy(() =>
+  import('./components/ThemeCustomizerModal').then((m) => ({ default: m.ThemeCustomizerModal }))
+);
 
 type VisualMode = 'full' | 'wireframe' | 'particles' | 'minimal';
 
@@ -66,7 +79,7 @@ export default function App() {
   const [visualMode, setVisualMode] = useState<VisualMode>('full');
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
 
-  // Studio HUD Session Timer (inspired by the Three.js HUD timer)
+  // Studio HUD Session Timer
   const [sessionSeconds, setSessionSeconds] = useState<number>(0);
 
   useEffect(() => {
@@ -218,23 +231,13 @@ export default function App() {
 
   const handleManualQuotaReset = async () => {
     if (user) {
-      const ok = await resetDailyQuotaManually();
-      setDailyUsage({ chars: 0, scripts: 0 });
-      try {
-        localStorage.removeItem(getTodayDateKey());
-      } catch (e) {}
-      if (ok) {
-        setSuccessNotice('Daily credits have been refreshed to full allowance.');
-      } else {
-        setSuccessNotice('Credits are already up-to-date for today.');
-      }
-    } else {
-      setDailyUsage({ chars: 0, scripts: 0 });
-      try {
-        localStorage.removeItem(getTodayDateKey());
-      } catch (e) {}
-      setSuccessNotice('Free guest daily quota has been refreshed.');
+      await resetDailyQuotaManually();
     }
+    setDailyUsage({ chars: 0, scripts: 0 });
+    try {
+      localStorage.removeItem(getTodayDateKey());
+    } catch (e) {}
+    setSuccessNotice('Daily studio character allowance has been refreshed to 2,000 characters.');
   };
 
   const currentAvailableChars = isUnlimited
@@ -258,7 +261,7 @@ export default function App() {
   // AI Chat Assistant Drawer
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
-  // Premium & Contact UPI Modal
+  // Studio Pro & Quota Modal
   const [isPremiumOpen, setIsPremiumOpen] = useState<boolean>(false);
 
   const playerSectionRef = useRef<HTMLDivElement>(null);
@@ -301,7 +304,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Load user cloud takes when signed in (without auto-opening stale session blob URLs in the player)
+  // Load user cloud takes when signed in
   useEffect(() => {
     if (user) {
       fetchUserTakes().then((cloudTakes) => {
@@ -319,30 +322,22 @@ export default function App() {
       return;
     }
 
-    // MANDATORY Sign In Gate: Without sign in, no generation can take place!
-    if (!user) {
-      setErrorNotice('Please sign in or create an account to synthesize audio (2,000 Free Characters included).');
-      setIsAuthOpen(true);
-      return;
-    }
-
     const isAdminUser =
-      !!user.email &&
+      !!user?.email &&
       ['rdpandit913@gmail.com', 'dubeyrishi135@gmail.com'].includes(user.email.trim().toLowerCase());
 
     // Check account credits for public users (2,000 character limit)
     if (!isAdminUser && userProfile && !userProfile.isPremium && userProfile.credits < scriptText.length) {
       setErrorNotice(
-        `Character limit reached! You have ${userProfile.credits.toLocaleString()} characters remaining from your 2,000 free allowance. Please upgrade via UPI to generate more.`
+        `Character limit reached (${userProfile.credits.toLocaleString()} chars remaining). Click "Sync Quota" to refresh your daily allowance.`
       );
-      setIsPremiumOpen(true);
       return;
     }
 
     const remainingChars = Math.max(0, MAX_CHARS_PER_DAY - dailyUsage.chars);
-    if (remainingChars <= 0) {
+    if (!isAdminUser && remainingChars < scriptText.length) {
       setErrorNotice(
-        `You have reached your daily generation allowance of ${MAX_CHARS_PER_DAY.toLocaleString()} characters. Quota resets at 12:00 AM midnight!`
+        `Daily character allowance reached (${remainingChars.toLocaleString()} chars left). Click "Sync Quota" to refill your allowance.`
       );
       return;
     }
@@ -388,7 +383,7 @@ export default function App() {
       setActiveClip(newClip);
       setClipHistory((prev) => [newClip, ...prev]);
       setSuccessNotice(
-        `Synthesized with locked voice "${selectedVoice.name}" [${scriptRecognition.label}] (${scriptText.length} credits used)`
+        `Synthesized with locked voice "${selectedVoice.name}" [${scriptRecognition.label}] (${scriptText.length} chars)`
       );
 
       // Scroll to player
@@ -468,16 +463,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen spatial-canvas text-[var(--text-primary)] font-['Plus_Jakarta_Sans',sans-serif] relative overflow-x-hidden selection:bg-[var(--accent-color)] selection:text-white">
-      {/* Live Interactive Three.js WebGL Acoustic Field (Shader Blob + Geodesic Wireframe + Particle Field) */}
-      <AcousticFieldCanvas
-        accentColor={currentTheme.accent}
-        secondaryColor={currentTheme.orbColors[0]}
-        canvasBg={currentTheme.canvasBg}
-        isGenerating={isGenerating}
-        isPlaying={isPlayingAudio}
-        speed={speed}
-        visualMode={visualMode}
-      />
+      {/* Live Interactive Three.js WebGL Acoustic Field (Code-Split via Suspense) */}
+      <Suspense fallback={null}>
+        <AcousticFieldCanvas
+          accentColor={currentTheme.accent}
+          secondaryColor={currentTheme.orbColors[0]}
+          canvasBg={currentTheme.canvasBg}
+          isGenerating={isGenerating}
+          isPlaying={isPlayingAudio}
+          speed={speed}
+          visualMode={visualMode}
+        />
+      </Suspense>
 
       {/* Ambient Atmospheric Glow Layers */}
       <div
@@ -516,7 +513,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-[11px] text-white/60 font-medium hidden sm:block">
-                24kHz Indian & Global Voice Synthesis
+                24kHz Indian &amp; Global Voice Synthesis
               </p>
             </div>
           </div>
@@ -639,7 +636,7 @@ export default function App() {
             </h1>
           </div>
 
-          {/* Interactive 3D Acoustic Field Mode Selector (Controls Shader Blob, Wireframe & Particles) */}
+          {/* Interactive 3D Acoustic Field Mode Selector */}
           <div className="flex flex-wrap items-center gap-2 self-start md:self-end">
             <div className="inline-flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/12 text-xs">
               <span className="px-2.5 py-1 text-[10px] font-mono-numbers uppercase tracking-wider text-white/55 hidden sm:inline-flex items-center gap-1">
@@ -679,7 +676,7 @@ export default function App() {
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2.5">
                   <label htmlFor="script-textarea" className="text-base text-white">
-                    <span className="font-bold-italic text-lg text-white">Script &</span>{' '}
+                    <span className="font-bold-italic text-lg text-white">Script &amp;</span>{' '}
                     <span
                       className="font-syne font-bold uppercase tracking-wide text-sm"
                       style={{ color: currentTheme.accent }}
@@ -688,7 +685,7 @@ export default function App() {
                     </span>
                   </label>
                   <span className="text-xs text-white/50 font-mono-numbers">
-                    · Hindi, Hinglish & English
+                    · Hindi, Hinglish &amp; English
                   </span>
                 </div>
 
@@ -699,7 +696,6 @@ export default function App() {
                     onError={(err) => setErrorNotice(err)}
                   />
 
-                  {/* Quick Font Selector Button */}
                   <button
                     type="button"
                     onClick={() => setIsThemeModalOpen(true)}
@@ -917,7 +913,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold-italic text-white flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-[#FF8A98]" />
-                    <span>Cadence &</span>{' '}
+                    <span>Cadence &amp;</span>{' '}
                     <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#FF8A98]">
                       Emotion
                     </span>
@@ -953,7 +949,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <label htmlFor="speed-slider" className="text-sm font-bold-italic text-white flex items-center gap-1.5">
                     <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF8A98]" />
-                    <span>Tempo &</span>{' '}
+                    <span>Tempo &amp;</span>{' '}
                     <span className="font-syne font-bold uppercase tracking-wider text-xs text-[#FF8A98]">
                       Speed
                     </span>
@@ -1019,8 +1015,6 @@ export default function App() {
                       ? 'bg-white/15 text-white cursor-wait border border-white/20'
                       : !scriptText.trim()
                       ? 'bg-white/5 text-white/40 cursor-not-allowed border border-white/10'
-                      : !user
-                      ? 'bg-[#E14B5A] hover:bg-[#C83746] text-white border border-white/20'
                       : 'bg-[#2E4E3B] hover:bg-[#254030] text-white border border-emerald-400/30'
                   }`}
                 >
@@ -1029,14 +1023,6 @@ export default function App() {
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       <span className="font-bold-italic font-mono-numbers">
                         Synthesizing ({generationTime.toFixed(1)}s)...
-                      </span>
-                    </>
-                  ) : !user ? (
-                    <>
-                      <AudioWaveform className="w-5 h-5" />
-                      <span className="font-bold-italic text-lg">Sign In to Synthesize</span>
-                      <span className="font-mono-numbers text-xs tracking-wide bg-black/30 px-2.5 py-0.5 rounded-lg text-white">
-                        2,000 Free Chars
                       </span>
                     </>
                   ) : (
@@ -1107,7 +1093,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Script Presets, Session History & Creator UPI Support (5 cols) */}
+          {/* RIGHT COLUMN: Script Presets, Session History & Studio Specs (5 cols) */}
           <div className="lg:col-span-5 space-y-6">
             {/* Curated Scripts Card */}
             <div ref={presetsSectionRef} className="spatial-glass rounded-[28px] p-6 sm:p-7 shadow-2xl space-y-4">
@@ -1229,25 +1215,6 @@ export default function App() {
                         </div>
 
                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {/* WhatsApp Share for this take */}
-                          <a
-                            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                              `🎙️ *VibeCast Take: ${clip.title}*\n🎭 *Voice:* ${clip.voiceName}\n📝 *Script:* "${clip.text.slice(0, 120)}..."\n\n🎧 *Listen in VibeCast Studio:* ${
-                                typeof window !== 'undefined' ? window.location.href : 'https://vibecast.studio'
-                              }`
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 rounded-lg bg-[#25D366]/20 hover:bg-[#25D366] text-[#25D366] hover:text-white border border-[#25D366]/30 transition-all cursor-pointer"
-                            title="Share take on WhatsApp"
-                          >
-                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-                            </svg>
-                          </a>
-
-                          {/* Individual delete */}
                           <button
                             type="button"
                             onClick={(e) => handleDeleteTake(clip.id, e)}
@@ -1265,115 +1232,101 @@ export default function App() {
               )}
             </div>
 
-            {/* Creator Support & Direct UPI Card */}
+            {/* Studio Mastering & Quota Card */}
             <div className="spatial-glass rounded-[28px] p-6 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#5F259F] text-white flex items-center justify-center font-bold text-xs shadow-sm border border-white/15">
-                    पे
+                  <div className="w-8 h-8 rounded-xl bg-[#2E4E3B] text-emerald-300 flex items-center justify-center font-bold text-xs shadow-sm border border-emerald-400/25">
+                    <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold font-fraunces text-white">
-                      UPI & Pro Studio Upgrade
+                      Studio Master Specs &amp; Quota
                     </h3>
-                    <p className="text-[11px] text-white/55">Union Bank of India - 0373</p>
+                    <p className="text-[11px] text-white/55">24kHz Lossless Audio Engine</p>
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setIsPremiumOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#E14B5A] hover:bg-[#C83746] text-white transition-all cursor-pointer shadow-xs"
+                  onClick={handleManualQuotaReset}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/15 transition-all cursor-pointer"
+                  title="Refresh daily studio character allowance"
                 >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>Scan QR</span>
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Refill Quota</span>
                 </button>
               </div>
 
-              {/* UPI ID block */}
-              <div className="flex items-center justify-between bg-black/35 px-3.5 py-2.5 rounded-xl border border-white/12">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-white/55 font-mono-numbers uppercase">UPI:</span>
-                  <span className="font-mono-numbers font-bold text-xs text-white select-all">
-                    7571889019@ybl
+              <div className="grid grid-cols-2 gap-2.5 text-xs font-mono-numbers">
+                <div className="p-3 rounded-xl bg-black/35 border border-white/10">
+                  <span className="text-[10px] text-white/50 uppercase block">Export Formats</span>
+                  <span className="font-bold text-white mt-0.5 block">WAV · MP3 · OGG · AAC</span>
+                </div>
+                <div className="p-3 rounded-xl bg-black/35 border border-white/10">
+                  <span className="text-[10px] text-white/50 uppercase block">Voice Identity</span>
+                  <span className="font-bold text-emerald-300 mt-0.5 block">
+                    {isVoiceLocked ? 'Locked & Persistent' : 'Dynamic'}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('7571889019@ybl');
-                    setSuccessNotice('UPI ID copied: 7571889019@ybl');
-                  }}
-                  className="text-xs font-bold text-[#FF8A98] hover:text-white cursor-pointer flex items-center gap-1 transition-colors"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </button>
-              </div>
-
-              {/* Email Support block */}
-              <div className="flex items-center justify-between text-xs text-white/70 px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/10">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <Mail className="w-3.5 h-3.5 text-[#FF8A98] flex-shrink-0" />
-                  <span className="font-mono-numbers truncate text-[11px]">
-                    dubeyrishi135@gmail.com
-                  </span>
-                </div>
-                <a
-                  href="mailto:dubeyrishi135@gmail.com?subject=VibeCast%20Query%20%2F%20Premium%20Support"
-                  className="font-bold text-emerald-300 hover:text-white flex-shrink-0 ml-2 transition-colors"
-                >
-                  Contact
-                </a>
               </div>
             </div>
           </div>
         </div>
       </main>
 
-      {/* AI Chat Assistant Modal */}
-      <AiChatAssistant
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        onInsertScript={(script) => {
-          setScriptText(script);
-          setSuccessNotice('Script inserted from AI Assistant.');
-        }}
-      />
+      {/* Lazy-Loaded Studio Modals */}
+      <Suspense fallback={null}>
+        {isChatOpen && (
+          <AiChatAssistant
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            onInsertScript={(script) => {
+              setScriptText(script);
+              setSuccessNotice('Script inserted from AI Assistant.');
+            }}
+          />
+        )}
 
-      {/* Premium & UPI Payment Modal */}
-      <PremiumModal
-        isOpen={isPremiumOpen}
-        onClose={() => setIsPremiumOpen(false)}
-      />
+        {isPremiumOpen && (
+          <PremiumModal
+            isOpen={isPremiumOpen}
+            onClose={() => setIsPremiumOpen(false)}
+            onResetQuota={handleManualQuotaReset}
+          />
+        )}
 
-      {/* User Auth & Credits Sign-In Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-      />
+        {isAuthOpen && (
+          <AuthModal
+            isOpen={isAuthOpen}
+            onClose={() => setIsAuthOpen(false)}
+          />
+        )}
 
-      {/* Admin vs Public Dual API Key Inspector Modal */}
-      <AdminKeyModal
-        isOpen={isAdminKeyModalOpen}
-        onClose={() => setIsAdminKeyModalOpen(false)}
-        currentUserEmail={user?.email}
-      />
+        {isAdminKeyModalOpen && (
+          <AdminKeyModal
+            isOpen={isAdminKeyModalOpen}
+            onClose={() => setIsAdminKeyModalOpen(false)}
+            currentUserEmail={user?.email}
+          />
+        )}
 
-      {/* Theme and Font Customizer Modal */}
-      <ThemeCustomizerModal
-        isOpen={isThemeModalOpen}
-        onClose={() => setIsThemeModalOpen(false)}
-      />
+        {isThemeModalOpen && (
+          <ThemeCustomizerModal
+            isOpen={isThemeModalOpen}
+            onClose={() => setIsThemeModalOpen(false)}
+          />
+        )}
+      </Suspense>
 
       {/* Clean Studio Footer */}
       <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 border-t border-white/10 text-xs text-white/60 flex flex-col sm:flex-row items-center justify-between gap-3 font-mono-numbers relative z-10">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold-italic text-sm text-white">VibeCast</span>
           <span>·</span>
-          <span>Spatial AI Voice & Podcast Workstation</span>
+          <span>Spatial AI Voice &amp; Podcast Workstation</span>
           <span>·</span>
-          <span className="text-[#F0C05A] font-bold">UPI: 7571889019@ybl</span>
+          <span className="text-emerald-300 font-semibold">Indian &amp; Global Prosody</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -1391,7 +1344,7 @@ export default function App() {
             className="text-[#F0C05A] hover:underline font-bold cursor-pointer flex items-center gap-1"
           >
             <Crown className="w-3.5 h-3.5 fill-current" />
-            <span>Upgrade Pro</span>
+            <span>Studio Pro Info</span>
           </button>
           <span>·</span>
           <span className="font-bold text-white/85">24kHz WAV · MP3 · OGG · AAC</span>

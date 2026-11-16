@@ -2,12 +2,14 @@ import { auth } from '../firebase/config';
 
 export type ApiMode = 'admin' | 'public';
 
+const ADMIN_EMAILS = ['rdpandit913@gmail.com', 'dubeyrishi135@gmail.com'];
+
 let activeApiMode: ApiMode = (() => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('vibecast_api_mode') as ApiMode | null;
     if (saved === 'admin' || saved === 'public') return saved;
   }
-  return 'admin';
+  return 'public';
 })();
 
 const listeners: Array<(mode: ApiMode) => void> = [];
@@ -33,8 +35,8 @@ export function subscribeApiMode(fn: (mode: ApiMode) => void) {
 }
 
 /**
- * Returns common API headers including the target user's email
- * to securely route between ADMIN_API_KEY and PUBLIC_API_KEY on the server proxy.
+ * Returns common API headers. Only attaches an admin user email when an authenticated
+ * admin is signed in and has selected the admin lane.
  */
 export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = {
@@ -42,16 +44,14 @@ export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record
     ...extraHeaders,
   };
 
-  const currentEmail = auth?.currentUser?.email;
+  const currentEmail = auth?.currentUser?.email?.trim().toLowerCase();
 
   if (activeApiMode === 'public') {
-    // In Public Simulation mode, send a public visitor email so server routes to PUBLIC_API_KEY
     headers['x-user-email'] = 'public-creator@vibecast.app';
+  } else if (currentEmail && ADMIN_EMAILS.includes(currentEmail)) {
+    headers['x-user-email'] = currentEmail;
   } else if (currentEmail) {
-    headers['x-user-email'] = currentEmail.trim().toLowerCase();
-  } else {
-    // Default Admin mode routes to owner email
-    headers['x-user-email'] = 'dubeyrishi135@gmail.com';
+    headers['x-user-email'] = currentEmail;
   }
 
   return headers;
