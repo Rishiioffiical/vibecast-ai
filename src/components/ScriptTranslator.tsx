@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Languages, ArrowRightLeft, Loader2, Undo2, Sparkles, Wand2, Feather } from 'lucide-react';
+import { Languages, ArrowRightLeft, Loader2, Undo2 } from 'lucide-react';
 import { getApiHeaders } from '../utils/apiClient';
 
 interface ScriptTranslatorProps {
@@ -72,36 +72,32 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
   };
 
   return (
-    <div className="pt-3.5 border-t border-white/15 space-y-2.5">
+    <div className="pt-3.5 border-t border-white/12 space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Languages className="w-4 h-4 text-[#FF8A98]" />
-          <span className="text-sm text-white">
-            <span className="font-bold-italic text-sm text-white">Bilingual</span>{' '}
-            <span className="font-syne font-bold uppercase tracking-wider text-[11px] text-[#FF8A98]">
-              Voice Translator
-            </span>
+          <Languages className="w-4 h-4 text-[var(--accent-color)]" />
+          <span className="text-sm font-semibold text-white">
+            Bilingual Voice Translator
           </span>
         </div>
 
         {/* Translation Nuance Style Selector */}
-        <div className="flex items-center gap-1 bg-[#EAE3D2] p-1 rounded-full border border-[#D8CEBC] text-[11px]">
-          <span className="text-[#6C776E] px-2 font-medium">Style:</span>
+        <div className="flex items-center gap-1 bg-black/35 p-1 rounded-xl border border-white/12 text-xs">
           {(
             [
-              { id: 'natural', label: 'Natural Voice' },
-              { id: 'emotional', label: 'Deep Emotion' },
-              { id: 'poetic', label: 'Lyrical/Poetic' },
+              { id: 'natural', label: 'Natural' },
+              { id: 'emotional', label: 'Emotional' },
+              { id: 'poetic', label: 'Poetic' },
             ] as const
           ).map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => setSelectedStyle(s.id)}
-              className={`px-2.5 py-0.5 rounded-full font-semibold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 selectedStyle === s.id
-                  ? 'bg-[#B83848] text-white shadow-xs font-bold'
-                  : 'text-[#4A554D] hover:text-[#1F261F]'
+                  ? 'bg-[var(--accent-color)] text-white shadow-xs'
+                  : 'text-white/65 hover:text-white'
               }`}
             >
               {s.label}
@@ -117,12 +113,12 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
             type="button"
             onClick={() => handleTranslate('hindi')}
             disabled={isTranslating || !currentText.trim()}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               targetLangInProgress === 'hindi'
-                ? 'bg-[#B83848] text-white cursor-wait'
+                ? 'bg-[var(--accent-color)] text-white cursor-wait'
                 : isTranslating || !currentText.trim()
-                ? 'bg-[#EAE3D4] text-[#8C988E] cursor-not-allowed border border-[#D5CABB]'
-                : 'bg-[#FAF7EF] hover:bg-[#B83848] hover:text-white border border-[#B83848]/60 text-[#8C202F] active:scale-98'
+                ? 'bg-white/[0.04] text-white/40 cursor-not-allowed border border-white/10'
+                : 'bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white hover:border-white/30'
             }`}
             title="Translate English or Hinglish script into expressive spoken Devanagari Hindi"
           >
@@ -134,8 +130,8 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
             ) : (
               <>
                 <span>English / Hinglish</span>
-                <ArrowRightLeft className="w-3.5 h-3.5 text-[#B83848] group-hover:text-white" />
-                <span className="font-extrabold">🇮🇳 Hindi (हिंदी)</span>
+                <ArrowRightLeft className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                <span className="font-bold">Hindi (हिंदी)</span>
               </>
             )}
           </button>
@@ -145,12 +141,12 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
             type="button"
             onClick={() => handleTranslate('english')}
             disabled={isTranslating || !currentText.trim()}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               targetLangInProgress === 'english'
                 ? 'bg-[#2E4E3B] text-white cursor-wait'
                 : isTranslating || !currentText.trim()
-                ? 'bg-[#EAE3D4] text-[#8C988E] cursor-not-allowed border border-[#D5CABB]'
-                : 'bg-[#FAF7EF] hover:bg-[#2E4E3B] hover:text-white border border-[#2E4E3B]/60 text-[#213F2C] active:scale-98'
+                ? 'bg-white/[0.04] text-white/40 cursor-not-allowed border border-white/10'
+                : 'bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-white hover:border-white/30'
             }`}
             title="Translate Hindi script into natural spoken English"
           >
@@ -162,8 +158,8 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
             ) : (
               <>
                 <span>Hindi (हिंदी)</span>
-                <ArrowRightLeft className="w-3.5 h-3.5 text-[#2E4E3B] group-hover:text-white" />
-                <span className="font-extrabold">🇺🇸 English</span>
+                <ArrowRightLeft className="w-3.5 h-3.5 text-[#38D9A9]" />
+                <span className="font-bold">English</span>
               </>
             )}
           </button>
@@ -174,7 +170,7 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
           <button
             type="button"
             onClick={handleUndo}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-[#FAF7EF] hover:bg-[#EAE3D4] text-[#B83848] border border-[#B83848]/40 transition-colors cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/[0.07] hover:bg-white/[0.14] text-[var(--accent-color)] border border-white/15 transition-colors cursor-pointer whitespace-nowrap shrink-0"
             title="Revert back to your previous script text"
           >
             <Undo2 className="w-3.5 h-3.5" />

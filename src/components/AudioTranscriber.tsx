@@ -124,7 +124,7 @@ export const AudioTranscriber: React.FC<AudioTranscriberProps> = ({
         <button
           type="button"
           onClick={stopRecording}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold bg-[#B83848] hover:bg-[#9E2A3B] text-white animate-pulse shadow-md cursor-pointer transition-colors"
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-[var(--accent-color)] text-white shadow-md cursor-pointer transition-opacity whitespace-nowrap shrink-0"
           title="Stop recording"
         >
           <Square className="w-3.5 h-3.5 fill-current" />
@@ -135,19 +135,19 @@ export const AudioTranscriber: React.FC<AudioTranscriberProps> = ({
         <button
           type="button"
           disabled
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold bg-[#FAF7EF] border border-[#B83848] text-[#B83848] cursor-wait shadow-sm"
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white/[0.08] border border-white/20 text-white cursor-wait whitespace-nowrap shrink-0"
         >
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#B83848]" />
-          <span>Transcribing Speech...</span>
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-color)]" />
+          <span>Transcribing...</span>
         </button>
       ) : (
         <button
           type="button"
           onClick={startRecording}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-[#FAF7EF] hover:bg-[#F2ECE0] border border-[#D5CABB] text-[#2C382E] hover:text-[#18221A] transition-all cursor-pointer shadow-xs"
-          title="Dictate with microphone (Gemini 3.5 Transcribe)"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/[0.06] hover:bg-white/[0.12] border border-white/12 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          title="Dictate with microphone"
         >
-          <Mic className="w-4 h-4 text-[#B83848]" />
+          <Mic className="w-3.5 h-3.5 text-[var(--accent-color)]" />
           <span>Dictate</span>
         </button>
       )}

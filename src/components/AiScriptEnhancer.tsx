@@ -79,9 +79,9 @@ export const AiScriptEnhancer: React.FC<AiScriptEnhancerProps> = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1">
-      <span className="text-xs font-fraunces font-bold text-[#B83848] flex items-center gap-1 pr-1">
-        <Sparkles className="w-3.5 h-3.5 text-[#B83848]" />
-        Tone Polisher:
+      <span className="text-xs font-semibold text-white/65 flex items-center gap-1.5 pr-1">
+        <Sparkles className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+        <span>Tone Polisher:</span>
       </span>
 
       {enhanceButtons.map((btn) => {
@@ -94,19 +94,19 @@ export const AiScriptEnhancer: React.FC<AiScriptEnhancerProps> = ({
             type="button"
             onClick={() => handleEnhance(btn.id)}
             disabled={activeType !== null}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               isLoading
-                ? 'bg-[#B83848] text-white cursor-wait'
+                ? 'bg-[var(--accent-color)] text-white cursor-wait'
                 : activeType !== null
-                ? 'opacity-50 cursor-not-allowed bg-[#EFE9DB] text-[#8C988D]'
-                : 'bg-[#F2ECE0] hover:bg-[#FAF7EF] border border-[#D5CABB] text-[#2C382E] hover:text-[#B83848] hover:border-[#B83848] shadow-xs'
+                ? 'opacity-45 cursor-not-allowed bg-white/[0.04] text-white/50 border border-white/10'
+                : 'bg-white/[0.06] hover:bg-white/[0.12] border border-white/12 text-white/90 hover:text-white hover:border-white/25'
             }`}
             title={btn.hint}
           >
             {isLoading ? (
-              <Loader2 className="w-3 h-3 animate-spin text-white" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
             ) : (
-              <Icon className="w-3 h-3 text-[#B83848]" />
+              <Icon className="w-3.5 h-3.5 text-[var(--accent-color)]" />
             )}
             <span>{btn.label}</span>
           </button>

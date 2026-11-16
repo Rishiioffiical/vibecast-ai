@@ -12,9 +12,7 @@ import {
   Crown,
   ExternalLink,
   Smartphone,
-  CreditCard,
   Building2,
-  CheckCircle2,
 } from 'lucide-react';
 
 interface PremiumModalProps {
@@ -39,7 +37,7 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
       width: 280,
       margin: 2,
       color: {
-        dark: '#1C201C',
+        dark: '#0B100D',
         light: '#FFFFFF',
       },
     })
@@ -70,26 +68,29 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="relative w-full max-w-2xl bg-[#FAF7EF] border-2 border-[#D8CEBC] rounded-[32px] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-2xl spatial-glass rounded-[28px] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col border border-white/15"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="bg-[#344638] text-[#FAF7EF] px-6 sm:px-8 py-5 flex items-center justify-between border-b border-white/10">
+        <div className="bg-black/45 text-white px-6 sm:px-8 py-5 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#B83848] text-white flex items-center justify-center shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-[#E14B5A] text-white flex items-center justify-center shadow-md border border-white/20">
               <Crown className="w-5 h-5 text-[#F0C05A] fill-[#F0C05A]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold-italic text-2xl tracking-tight text-[#FAF7EF]">VibeCast</span>
-                <span className="font-syne font-black text-xs uppercase px-2 py-0.5 rounded-full bg-[#F0C05A] text-[#1F261F]">
-                  Premium
+              <div className="flex items-center gap-2.5">
+                <span className="font-bold-italic text-2xl tracking-tight text-white">VibeCast</span>
+                <span className="font-syne font-black text-[10px] uppercase tracking-widest text-[#F0C05A]">
+                  · PRO STUDIO
                 </span>
               </div>
-              <p className="text-xs text-[#CBD8CD]">
-                Upgrade to Unlimited Voice Synthesis & Creator Support
+              <p className="text-xs text-white/65">
+                Unlimited 24kHz Voice Synthesis & Direct Creator UPI Support
               </p>
             </div>
           </div>
@@ -97,9 +98,9 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-[#FAF7EF] flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/80 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -107,59 +108,59 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
         <div className="p-6 sm:p-8 overflow-y-auto space-y-6">
           {/* Premium Perks Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3.5 rounded-2xl bg-[#F2ECE0] border border-[#DFD6C7] space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F261F]">
-                <Zap className="w-4 h-4 text-[#B83848]" />
+            <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <Zap className="w-4 h-4 text-[#F0C05A]" />
                 <span>Unlimited Quota</span>
               </div>
-              <p className="text-[11px] text-[#5C6E60] leading-relaxed">
-                Remove the 25k daily character & script limits completely.
+              <p className="text-[11px] text-white/65 leading-relaxed">
+                Remove daily character and script synthesis limits completely.
               </p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#F2ECE0] border border-[#DFD6C7] space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F261F]">
-                <Sparkles className="w-4 h-4 text-[#2E4E3B]" />
+            <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
                 <span>Priority Generation</span>
               </div>
-              <p className="text-[11px] text-[#5C6E60] leading-relaxed">
-                Dedicated compute lane for near-instant 24kHz audio synthesis.
+              <p className="text-[11px] text-white/65 leading-relaxed">
+                Dedicated studio lane for fast 24kHz Indian & English voice synthesis.
               </p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-[#F2ECE0] border border-[#DFD6C7] space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F261F]">
-                <ShieldCheck className="w-4 h-4 text-[#B83848]" />
+            <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <ShieldCheck className="w-4 h-4 text-[#FF8A98]" />
                 <span>VIP Support</span>
               </div>
-              <p className="text-[11px] text-[#5C6E60] leading-relaxed">
-                Direct email response and prompt custom voice adjustments.
+              <p className="text-[11px] text-white/65 leading-relaxed">
+                Direct email response and custom voice calibration support.
               </p>
             </div>
           </div>
 
           {/* Payment Section (QR Code & UPI ID) */}
-          <div className="bg-[#FFFFFF] border-2 border-[#DFD6C7] rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[#EAE3D4]">
+          <div className="bg-black/35 border border-white/12 rounded-2xl p-5 sm:p-6 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-[#B83848]" />
-                <h4 className="text-sm font-bold font-fraunces text-[#1F261F]">
+                <QrCode className="w-4 h-4 text-[#FF8A98]" />
+                <h4 className="text-sm font-bold font-fraunces text-white">
                   Scan & Pay via any UPI App
                 </h4>
               </div>
-              <span className="text-[11px] font-mono-numbers px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                Instant UPI
+              <span className="text-[11px] font-mono-numbers text-emerald-300 font-bold uppercase tracking-wider">
+                Instant UPI Verification
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
-              {/* QR Code Container */}
-              <div className="sm:col-span-5 flex flex-col items-center justify-center p-3 bg-[#1C201C] rounded-2xl shadow-md border-2 border-[#FAF7EF]">
+              {/* High-Contrast QR Code Container */}
+              <div className="sm:col-span-5 flex flex-col items-center justify-center p-3.5 bg-white/[0.05] rounded-2xl border border-white/15">
                 {qrDataUrl ? (
-                  <div className="bg-white p-2 rounded-xl shadow-inner relative group">
+                  <div className="bg-white p-2.5 rounded-xl shadow-md relative">
                     <img
                       src={qrDataUrl}
-                      alt="VibeCast PhonePe UPI QR Code"
+                      alt="VibeCast UPI QR Code"
                       className="w-44 h-44 object-contain rounded-lg"
                     />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -169,13 +170,13 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
                     </div>
                   </div>
                 ) : (
-                  <div className="w-44 h-44 flex items-center justify-center bg-gray-100 text-gray-400 rounded-xl">
+                  <div className="w-44 h-44 flex items-center justify-center bg-white/10 text-white/50 rounded-xl text-xs">
                     Loading QR...
                   </div>
                 )}
-                <div className="mt-2 text-center">
-                  <span className="text-[10px] text-[#CBD8CD] font-mono-numbers uppercase tracking-wider font-semibold">
-                    Supported on all UPI apps
+                <div className="mt-2.5 text-center">
+                  <span className="text-[10px] text-white/65 font-mono-numbers uppercase tracking-wider font-semibold">
+                    Works with all UPI apps
                   </span>
                 </div>
               </div>
@@ -183,34 +184,34 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
               {/* UPI Details & Copy */}
               <div className="sm:col-span-7 space-y-3.5">
                 {/* Bank Banner */}
-                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#F5F2EB] border border-[#E0D8CA]">
-                  <Building2 className="w-4 h-4 text-[#5F259F] flex-shrink-0" />
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-white/[0.04] border border-white/10">
+                  <Building2 className="w-4 h-4 text-[#F0C05A] flex-shrink-0" />
                   <div className="text-xs">
-                    <p className="font-bold text-[#1F261F]">{BANK_INFO}</p>
-                    <p className="text-[11px] text-[#6A786E]">Primary verified account for receiving payments</p>
+                    <p className="font-bold text-white">{BANK_INFO}</p>
+                    <p className="text-[11px] text-white/60">Verified receiving account for VibeCast Studio</p>
                   </div>
                 </div>
 
                 {/* UPI ID Field with Copy Button */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#4A554D] uppercase tracking-wider font-mono-numbers">
+                  <label className="text-[11px] font-bold text-white/65 uppercase tracking-wider font-mono-numbers">
                     UPI ID:
                   </label>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 px-4 py-2.5 rounded-xl bg-[#F4EFE6] border-2 border-[#DFD6C7] font-mono-numbers font-bold text-sm text-[#1F261F] tracking-wide select-all">
+                    <div className="flex-1 px-4 py-2.5 rounded-xl bg-black/45 border border-white/15 font-mono-numbers font-bold text-sm text-white tracking-wide select-all">
                       {UPI_ID}
                     </div>
                     <button
                       type="button"
                       onClick={handleCopyUpi}
-                      className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                      className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                         copiedUpi
                           ? 'bg-emerald-600 text-white'
-                          : 'bg-[#B83848] hover:bg-[#9E2A3B] text-white'
+                          : 'bg-[#E14B5A] hover:bg-[#C83746] text-white'
                       }`}
                     >
                       {copiedUpi ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedUpi ? 'Copied!' : 'Copy'}</span>
+                      <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
                 </div>
@@ -219,7 +220,7 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
                 <div>
                   <a
                     href={upiUri}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#5F259F] hover:bg-[#4E1E85] text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#5F259F] hover:bg-[#4E1E85] text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors border border-white/15"
                   >
                     <Smartphone className="w-4 h-4" />
                     <span>Open in PhonePe / GPay / Paytm</span>
@@ -227,8 +228,8 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
                   </a>
                 </div>
 
-                {/* Supported Apps Logos text */}
-                <div className="pt-1 flex items-center justify-between text-[11px] text-[#7A877C] font-semibold border-t border-[#EAE3D4]">
+                {/* Supported Apps text */}
+                <div className="pt-1 flex items-center justify-between text-[11px] text-white/55 font-semibold border-t border-white/10">
                   <span>PhonePe</span>
                   <span>·</span>
                   <span>Google Pay</span>
@@ -242,28 +243,28 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
           </div>
 
           {/* Contact & Support Email Box */}
-          <div className="bg-[#FAF7EF] border-2 border-[#DFD6C7] rounded-3xl p-5 sm:p-6 space-y-3">
+          <div className="bg-white/[0.03] border border-white/12 rounded-2xl p-5 sm:p-6 space-y-3">
             <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-[#B83848]" />
-              <h4 className="text-sm font-bold font-fraunces text-[#1F261F]">
+              <Mail className="w-4 h-4 text-[#FF8A98]" />
+              <h4 className="text-sm font-bold font-fraunces text-white">
                 Support & Payment Confirmation
               </h4>
             </div>
 
-            <p className="text-xs text-[#5C6E60] leading-relaxed">
-              After completing the UPI payment, simply share your transaction screenshot or payment reference with us for instant verification and plan activation.
+            <p className="text-xs text-white/65 leading-relaxed">
+              After completing your UPI payment, share your transaction reference or screenshot for instant plan activation.
             </p>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white border border-[#DFD6C7]">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-black/35 border border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[#B83848]/10 text-[#B83848] flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-lg bg-[#E14B5A]/20 text-[#FF8A98] border border-[#E14B5A]/30 flex items-center justify-center font-bold text-xs">
                   @
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#8C988E] block">
+                  <span className="text-[10px] uppercase font-bold text-white/50 block">
                     Official Support Email
                   </span>
-                  <span className="font-mono-numbers font-bold text-sm text-[#1F261F]">
+                  <span className="font-mono-numbers font-bold text-sm text-white">
                     {SUPPORT_EMAIL}
                   </span>
                 </div>
@@ -273,15 +274,15 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
                 <button
                   type="button"
                   onClick={handleCopyEmail}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#F4EFE6] hover:bg-[#EAE3D4] text-[#1F261F] border border-[#DFD6C7] flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/12 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedEmail ? 'Copied' : 'Copy Email'}</span>
                 </button>
 
                 <a
                   href={`mailto:${SUPPORT_EMAIL}?subject=VibeCast%20Premium%20Subscription%20Screenshot&body=Hello%20VibeCast%20Team%2C%0A%0AI%20have%20completed%20the%20UPI%20payment%20to%207571889019%40ybl.%20Attached%20is%20my%20payment%20screenshot%2Ftransaction%20ID.%0A%0AThank%20you!`}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#2E4E3B] hover:bg-[#233C2D] text-white flex items-center gap-1.5 transition-colors"
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#2E4E3B] hover:bg-[#233C2D] text-white border border-emerald-400/25 flex items-center gap-1.5 transition-colors"
                 >
                   <Mail className="w-3.5 h-3.5" />
                   <span>Send Mail</span>
@@ -292,14 +293,14 @@ export const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Footer */}
-        <div className="bg-[#F5F1E6] px-6 sm:px-8 py-3.5 border-t border-[#DFD6C7] flex items-center justify-between text-xs text-[#6A786E]">
+        <div className="bg-black/45 px-6 sm:px-8 py-3.5 border-t border-white/10 flex items-center justify-between text-xs text-white/60">
           <span className="font-mono-numbers">
-            VibeCast Studio · 100% Secure UPI Processing
+            VibeCast Studio · Direct UPI Processing
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="font-bold text-[#B83848] hover:underline cursor-pointer"
+            className="font-bold text-[#FF8A98] hover:text-white transition-colors cursor-pointer"
           >
             Close
           </button>

@@ -12,15 +12,17 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+app.disable('x-powered-by');
 app.use(express.json({ limit: '5mb' }));
 
-// Professional Security Headers Middleware
+// Hardened Production Security Headers Middleware
 app.use((_req: Request, res: Response, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Permissions-Policy', 'microphone=*');
+  res.setHeader('Permissions-Policy', 'microphone=(self), geolocation=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   next();
 });
 
@@ -33,7 +35,10 @@ const rateLimitStore = new Map<string, RateLimitRecord>();
 
 function rateLimiter(maxRequests: number, windowMs: number = 60 * 1000) {
   return (req: Request, res: Response, next: () => void) => {
-    const rawIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+    const rawIp =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
     const key = `${req.path}:${rawIp}`;
     const now = Date.now();
 
@@ -45,11 +50,15 @@ function rateLimiter(maxRequests: number, windowMs: number = 60 * 1000) {
       record.count++;
     }
 
+    res.setHeader('X-RateLimit-Limit', maxRequests.toString());
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, maxRequests - record.count).toString());
+
     if (record.count > maxRequests) {
       const retryAfterSeconds = Math.max(1, Math.ceil((record.resetTime - now) / 1000));
       res.setHeader('Retry-After', retryAfterSeconds.toString());
       return res.status(429).json({
-        error: 'Too many requests. Rate limit exceeded to protect studio resources. Please slow down and try again.',
+        error:
+          'Too many requests. Rate limit exceeded to protect studio resources. Please slow down and try again.',
         code: 'RATE_LIMIT_EXCEEDED',
         retryAfter: retryAfterSeconds,
       });
@@ -88,7 +97,8 @@ function getCandidateKeysForRequest(req: Request): {
   isAdmin: boolean;
   userEmail: string;
 } {
-  const rawEmail = (req.headers['x-user-email'] as string) || (req.body && req.body.userEmail) || '';
+  const rawEmail =
+    (req.headers['x-user-email'] as string) || (req.body && req.body.userEmail) || '';
   const userEmail = rawEmail.trim().toLowerCase();
   const isAdmin = !!(userEmail && ADMIN_EMAILS.includes(userEmail));
 
@@ -97,7 +107,9 @@ function getCandidateKeysForRequest(req: Request): {
     ? [ADMIN_API_KEY, PUBLIC_API_KEY, process.env.GEMINI_API_KEY]
     : [PUBLIC_API_KEY, ADMIN_API_KEY, process.env.GEMINI_API_KEY];
 
-  const keys = Array.from(new Set(rawPool.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)));
+  const keys = Array.from(
+    new Set(rawPool.filter((k): k is string => typeof k === 'string' && k.trim().length > 0))
+  );
 
   return { keys, isAdmin, userEmail };
 }
@@ -140,14 +152,22 @@ async function runWithKeyFailover<T>(
       } catch (err: any) {
         lastError = err;
         const status = err?.status || err?.statusText || err?.code;
-        const isTransient = status === 503 || status === 429 || `${err?.message}`.includes('high demand') || `${err?.message}`.includes('RESOURCE_EXHAUSTED');
+        const isTransient =
+          status === 503 ||
+          status === 429 ||
+          `${err?.message}`.includes('high demand') ||
+          `${err?.message}`.includes('RESOURCE_EXHAUSTED');
 
         if (isTransient && attempt < 2) {
           await new Promise((r) => setTimeout(r, 350));
           continue;
         }
 
-        console.warn(`[Key Failover] Key #${i + 1} attempt ${attempt} failed: ${err?.message || err} [status: ${status}]. Attempting fallback...`);
+        console.warn(
+          `[Key Failover] Key #${i + 1} attempt ${attempt} failed: ${
+            err?.message || err
+          } [status: ${status}]. Attempting fallback...`
+        );
         break;
       }
     }
@@ -308,12 +328,18 @@ function buildStylePrompt(
 
   if (isEnglish) {
     const englishStyles: Record<string, string> = {
-      'educational-clear': 'Crystal-clear, articulate Indian English educator and documentary narrator with crisp diction and natural human cadence.',
-      'emotional-deep': 'Deep, soulful, and introspective male voice with natural cadence, heartfelt pauses, and resonant vocal warmth.',
-      'emotional-dramatic': 'Cinematic, intense, and commanding deep baritone theatrical narrator with powerful presence and dynamic range.',
-      'emotional-poetic': 'Warm, charismatic, and conversational male voice with natural phrasing, engaging rhythm, and smooth delivery.',
-      'emotional-melancholy': 'Mellow, nostalgic, and quiet reflective voice with delicate sorrow and gentle pacing.',
-      'emotional-inspiring': 'Confident, motivational, and passionate speaker with uplifting energy and articulate clarity.',
+      'educational-clear':
+        'Crystal-clear, articulate Indian English educator and documentary narrator with crisp diction and natural human cadence.',
+      'emotional-deep':
+        'Deep, soulful, and introspective male voice with natural cadence, heartfelt pauses, and resonant vocal warmth.',
+      'emotional-dramatic':
+        'Cinematic, intense, and commanding deep baritone theatrical narrator with powerful presence and dynamic range.',
+      'emotional-poetic':
+        'Warm, charismatic, and conversational male voice with natural phrasing, engaging rhythm, and smooth delivery.',
+      'emotional-melancholy':
+        'Mellow, nostalgic, and quiet reflective voice with delicate sorrow and gentle pacing.',
+      'emotional-inspiring':
+        'Confident, motivational, and passionate speaker with uplifting energy and articulate clarity.',
     };
 
     const base = englishStyles[emotion] || englishStyles['educational-clear'];
@@ -322,12 +348,18 @@ function buildStylePrompt(
 
   // Hindi & Hinglish Styles (Always authentic Indian accent & crystal-clear studio diction)
   const hindiStyles: Record<string, string> = {
-    'educational-clear': 'Crystal-clear, articulate Indian educator and explainer voice (Hindi & Hinglish) with crisp studio diction, natural human breath pauses, and zero robotic AI tone.',
-    'emotional-deep': 'Deep, soulful, and emotionally moving Indian Hindi voice with crystal-clear diction, expressive pauses, poignant resonance, and heartfelt human cadence.',
-    'emotional-dramatic': 'Dramatic, intense, and commanding Indian Hindi theatrical narrator voice with crystal-clear articulation and cinematic depth.',
-    'emotional-poetic': 'Poetic, warm, and conversational Indian Hindi voice with soulful clarity, nuanced articulation, and natural human flow.',
-    'emotional-melancholy': 'Mellow, nostalgic, and tender Indian Hindi voice with gentle human breathing and clear, intimate studio presence.',
-    'emotional-inspiring': 'Inspirational, motivational, and confident Indian Hindi speaker voice filled with clarity, conviction, and uplifting human energy.',
+    'educational-clear':
+      'Crystal-clear, articulate Indian educator and explainer voice (Hindi & Hinglish) with crisp studio diction, natural human breath pauses, and zero robotic AI tone.',
+    'emotional-deep':
+      'Deep, soulful, and emotionally moving Indian Hindi voice with crystal-clear diction, expressive pauses, poignant resonance, and heartfelt human cadence.',
+    'emotional-dramatic':
+      'Dramatic, intense, and commanding Indian Hindi theatrical narrator voice with crystal-clear articulation and cinematic depth.',
+    'emotional-poetic':
+      'Poetic, warm, and conversational Indian Hindi voice with soulful clarity, nuanced articulation, and natural human flow.',
+    'emotional-melancholy':
+      'Mellow, nostalgic, and tender Indian Hindi voice with gentle human breathing and clear, intimate studio presence.',
+    'emotional-inspiring':
+      'Inspirational, motivational, and confident Indian Hindi speaker voice filled with clarity, conviction, and uplifting human energy.',
   };
 
   const styleBase = hindiStyles[emotion] || hindiStyles['educational-clear'];
@@ -425,7 +457,10 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
           },
         });
       } catch (innerErr: any) {
-        console.warn('TTS with speechMetadata failed, retrying with standard text prompt...', innerErr?.message);
+        console.warn(
+          'TTS with speechMetadata failed, retrying with standard text prompt...',
+          innerErr?.message
+        );
         response = await ai.models.generateContent({
           model: 'gemini-3.8-flash-lite-tts',
           contents: [
@@ -523,34 +558,57 @@ app.post('/api/transcribe', rateLimiter(20, 60000), async (req: Request, res: Re
   }
 });
 
-// POST /api/ai/enhance - AI Hindi Script Enhancer & Tone Rewriter using gemini-3.8-flash
+// POST /api/ai/enhance - AI Hindi Script Enhancer & Tone Rewriter
 app.post('/api/ai/enhance', rateLimiter(30, 60000), async (req: Request, res: Response) => {
   try {
     const { text, type = 'emotional' } = req.body;
 
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'Script text is required.' });
     }
 
+    const cleanInput = text.trim().slice(0, 3000);
+
     const instructions: Record<string, string> = {
-      emotional: 'Rewrite and elevate this script to be deeply emotional, touching, and poignant (दर्द व गहराई भरा). Use evocative Hindi words with poetic pauses.',
-      dramatic: 'Rewrite this script into an intense, cinematic theatrical dialogue with commanding power, passion, and strong rhetorical impact.',
-      poetic: 'Convert this script into an exquisite Hindi/Urdu shayari or lyrical kavita with rich metaphors, rhythm, and soulful rhyme.',
-      expand: 'Expand this script into a full heartfelt narration (~3-4 rich sentences) keeping the original sentiment alive.',
+      emotional:
+        'Rewrite and elevate this script to be deeply emotional, touching, and poignant (दर्द व गहराई भरा). Use evocative Hindi words with poetic pauses.',
+      dramatic:
+        'Rewrite this script into an intense, cinematic theatrical dialogue with commanding power, passion, and strong rhetorical impact.',
+      poetic:
+        'Convert this script into an exquisite Hindi/Urdu shayari or lyrical kavita with rich metaphors, rhythm, and soulful rhyme.',
+      expand:
+        'Expand this script into a full heartfelt narration (~3-4 rich sentences) keeping the original sentiment alive.',
     };
 
     const selectedInstruction = instructions[type] || instructions.emotional;
+    const promptContents = `${selectedInstruction}\n\nOriginal Text:\n${cleanInput}\n\nIMPORTANT: Return ONLY the rewritten script, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`;
+    const sysInstruction =
+      'You are an award-winning Indian cinematic scriptwriter, educator, and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.';
 
     const result = await runWithKeyFailover(req, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `${selectedInstruction}\n\nOriginal Text:\n${text}\n\nIMPORTANT: Return ONLY the rewritten script, ready for immediate text-to-speech voice narration. Do not include quotes, greetings, or conversational remarks.`,
-        config: {
-          systemInstruction:
-            'You are an award-winning Indian cinematic scriptwriter, educator, and emotional Hindi poet (शायर). You specialize in craft and voice prosody for audio speech synthesis.',
-        },
-      });
-      return response.text?.trim() || text;
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: promptContents,
+          config: {
+            systemInstruction: sysInstruction,
+          },
+        });
+        return response.text?.trim() || cleanInput;
+      } catch (primaryErr: any) {
+        const msg = `${primaryErr?.message || ''}`;
+        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+          const fallbackResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-lite',
+            contents: promptContents,
+            config: {
+              systemInstruction: sysInstruction,
+            },
+          });
+          return fallbackResponse.text?.trim() || cleanInput;
+        }
+        throw primaryErr;
+      }
     });
 
     return res.json({
@@ -581,7 +639,7 @@ function extractGroundingSources(response: any): {
     if (uri && typeof uri === 'string' && !seenUris.has(uri)) {
       seenUris.add(uri);
       sources.push({
-        title: (title && typeof title === 'string' ? title.trim() : uri),
+        title: title && typeof title === 'string' ? title.trim() : uri,
         uri,
       });
     }
@@ -595,29 +653,35 @@ function extractGroundingSources(response: any): {
 }
 
 // POST /api/ai/google-search-script - Generate a voiceover script grounded in real-time Google Search data
-app.post('/api/ai/google-search-script', rateLimiter(25, 60000), async (req: Request, res: Response) => {
-  try {
-    const { query, language = 'hindi', emotion = 'emotional-deep' } = req.body;
+app.post(
+  '/api/ai/google-search-script',
+  rateLimiter(25, 60000),
+  async (req: Request, res: Response) => {
+    try {
+      const { query, language = 'hindi', emotion = 'emotional-deep' } = req.body;
 
-    if (!query || typeof query !== 'string' || !query.trim()) {
-      return res.status(400).json({ error: 'Search topic or query is required.' });
-    }
+      if (!query || typeof query !== 'string' || !query.trim()) {
+        return res.status(400).json({ error: 'Search topic or query is required.' });
+      }
 
-    const cleanQuery = query.trim();
-    const isHindi = language === 'hindi';
+      const cleanQuery = query.trim().slice(0, 400);
+      const isHindi = language === 'hindi';
 
-    const emotionToneMap: Record<string, string> = {
-      'emotional-deep': 'deep, soulful, reflective, and emotionally resonant documentary narration',
-      'emotional-dramatic': 'intense, cinematic, commanding, and high-stakes broadcast storytelling',
-      'emotional-poetic': 'warm, eloquent, literary, and lyrical podcast storytelling',
-      'emotional-melancholy': 'poignant, thoughtful, and deeply moving narrative tone',
-      'emotional-inspiring': 'uplifting, visionary, energetic, and motivational voiceover narration',
-    };
+      const emotionToneMap: Record<string, string> = {
+        'emotional-deep':
+          'deep, soulful, reflective, and emotionally resonant documentary narration',
+        'emotional-dramatic':
+          'intense, cinematic, commanding, and high-stakes broadcast storytelling',
+        'emotional-poetic': 'warm, eloquent, literary, and lyrical podcast storytelling',
+        'emotional-melancholy': 'poignant, thoughtful, and deeply moving narrative tone',
+        'emotional-inspiring':
+          'uplifting, visionary, energetic, and motivational voiceover narration',
+      };
 
-    const toneDescription = emotionToneMap[emotion] || emotionToneMap['emotional-deep'];
+      const toneDescription = emotionToneMap[emotion] || emotionToneMap['emotional-deep'];
 
-    const prompt = isHindi
-      ? `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
+      const prompt = isHindi
+        ? `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
 Using accurate, up-to-date information from Google Search, write a compelling, natural spoken voiceover / podcast script in pure Hindi (Devanagari script) suitable for immediate text-to-speech synthesis.
 Tone & Style: ${toneDescription}.
 Length: 4 to 6 rich, engaging spoken sentences (~80–140 words).
@@ -625,7 +689,7 @@ Rules:
 1. Incorporate real facts, dates, figures, or recent developments found via Google Search naturally into the spoken narration.
 2. Write ONLY in clean Devanagari Hindi (e.g., नमस्ते दोस्तों...) with natural punctuation (commas, ellipses, full stops) for expressive vocal pauses.
 3. Return ONLY the spoken voiceover script text itself—no titles, no markdown headers, no bullet points, and no introductory remarks.`
-      : `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
+        : `Search Google for the latest, verified, real-world facts and news about: "${cleanQuery}".
 Using accurate, up-to-date information from Google Search, write a compelling, natural spoken voiceover / podcast script in English suitable for immediate text-to-speech synthesis.
 Tone & Style: ${toneDescription}.
 Length: 4 to 6 rich, engaging spoken sentences (~80–140 words).
@@ -634,39 +698,56 @@ Rules:
 2. Use natural punctuation (commas, ellipses, periods) for expressive vocal cadence.
 3. Return ONLY the spoken voiceover script text itself—no titles, no markdown headers, no bullet points, and no introductory remarks.`;
 
-    const result = await runWithKeyFailover(req, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          systemInstruction:
-            'You are an award-winning documentary & podcast voiceover scriptwriter. You always ground your scripts in real, up-to-date facts retrieved via Google Search and write clean spoken narration ready for studio TTS.',
-        },
+      const result = await runWithKeyFailover(req, async (ai) => {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents: prompt,
+            config: {
+              tools: [{ googleSearch: {} }],
+              systemInstruction:
+                'You are an award-winning documentary & podcast voiceover scriptwriter. You always ground your scripts in real, up-to-date facts retrieved via Google Search and write clean spoken narration ready for studio TTS.',
+            },
+          });
+
+          let script = response.text?.trim() || '';
+          if (script.startsWith('"') && script.endsWith('"')) {
+            script = script.slice(1, -1).trim();
+          }
+          const { sources, searchQueries } = extractGroundingSources(response);
+          return { script, sources, searchQueries };
+        } catch (primaryErr: any) {
+          const msg = `${primaryErr?.message || ''}`;
+          if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+            const fallbackResponse = await ai.models.generateContent({
+              model: 'gemini-3.1-flash-lite',
+              contents: prompt,
+            });
+            let script = fallbackResponse.text?.trim() || '';
+            if (script.startsWith('"') && script.endsWith('"')) {
+              script = script.slice(1, -1).trim();
+            }
+            return { script, sources: [], searchQueries: [] };
+          }
+          throw primaryErr;
+        }
       });
 
-      let script = response.text?.trim() || '';
-      if (script.startsWith('"') && script.endsWith('"')) {
-        script = script.slice(1, -1).trim();
-      }
-      const { sources, searchQueries } = extractGroundingSources(response);
-      return { script, sources, searchQueries };
-    });
-
-    return res.json({
-      script: result.script,
-      sources: result.sources,
-      searchQueries: result.searchQueries,
-      language,
-      query: cleanQuery,
-    });
-  } catch (error: any) {
-    console.error('Error in /api/ai/google-search-script:', error);
-    return res.status(500).json({
-      error: error?.message || 'Failed to generate script from Google Search data.',
-    });
+      return res.json({
+        script: result.script,
+        sources: result.sources,
+        searchQueries: result.searchQueries,
+        language,
+        query: cleanQuery,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/ai/google-search-script:', error);
+      return res.status(500).json({
+        error: error?.message || 'Failed to generate script from Google Search data.',
+      });
+    }
   }
-});
+);
 
 // POST /api/ai/chat - Multi-turn conversational AI script assistant using gemini-4-hydrogen + Google Search Grounding
 app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Response) => {
@@ -678,9 +759,9 @@ app.post('/api/ai/chat', rateLimiter(30, 60000), async (req: Request, res: Respo
     }
 
     // Format contents for generateContent
-    const formattedContents = messages.map((m: any) => ({
+    const formattedContents = messages.slice(-12).map((m: any) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
-      parts: [{ text: m.content || m.text || '' }],
+      parts: [{ text: String(m.content || m.text || '').slice(0, 3000) }],
     }));
 
     const result = await runWithKeyFailover(req, async (ai) => {
@@ -736,19 +817,23 @@ app.post('/api/ai/translate', rateLimiter(30, 60000), async (req: Request, res: 
   try {
     const { text, targetLang = 'hindi', style = 'natural' } = req.body;
 
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'Text is required for translation.' });
     }
 
+    const cleanInput = text.trim().slice(0, 3000);
     const isToHindi = targetLang === 'hindi';
 
     let styleDirective = '';
     if (style === 'emotional') {
-      styleDirective = 'Use deeply evocative, touching, heartfelt vocabulary with emotional weight (गहराई और भावुकता).';
+      styleDirective =
+        'Use deeply evocative, touching, heartfelt vocabulary with emotional weight (गहराई और भावुकता).';
     } else if (style === 'poetic') {
-      styleDirective = 'Use rhythmic, lyrical, poetic diction suitable for artistic recitation, shayaris, or theatrical monologues.';
+      styleDirective =
+        'Use rhythmic, lyrical, poetic diction suitable for artistic recitation, shayaris, or theatrical monologues.';
     } else {
-      styleDirective = 'Use natural, idiomatic, spoken voiceover language that sounds completely authentic when spoken out loud.';
+      styleDirective =
+        'Use natural, idiomatic, spoken voiceover language that sounds completely authentic when spoken out loud.';
     }
 
     const systemPrompt = isToHindi
@@ -770,13 +855,29 @@ Rules:
 4. Preserve punctuation, pauses, and rhetorical questions for voice cadence.
 5. Output ONLY the translated English script. Do NOT include quotes, "Translation:", notes, or preambles.`;
 
-    const translatedText = await runWithKeyFailover(req, async (ai) => {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${text}\n\n=== TRANSLATED OUTPUT ONLY ===`,
-      });
+    const fullContents = `${systemPrompt}\n\n=== TEXT TO TRANSLATE ===\n${cleanInput}\n\n=== TRANSLATED OUTPUT ONLY ===`;
 
-      let out = response.text?.trim() || '';
+    const translatedText = await runWithKeyFailover(req, async (ai) => {
+      let out = '';
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: fullContents,
+        });
+        out = response.text?.trim() || '';
+      } catch (primaryErr: any) {
+        const msg = `${primaryErr?.message || ''}`;
+        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+          const fallbackResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-lite',
+            contents: fullContents,
+          });
+          out = fallbackResponse.text?.trim() || '';
+        } else {
+          throw primaryErr;
+        }
+      }
+
       if (out.startsWith('"') && out.endsWith('"')) {
         out = out.slice(1, -1).trim();
       }
@@ -822,7 +923,12 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        maxAge: '1d',
+        etag: true,
+      })
+    );
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
