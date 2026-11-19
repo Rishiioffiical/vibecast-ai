@@ -8,6 +8,9 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig(() => {
   return {
+    // Use relative asset URLs so the built app works both at a domain root
+    // (Vercel) and under a repository subpath (GitHub Pages).
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
