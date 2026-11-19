@@ -12,7 +12,7 @@ import {
   ExternalLink,
   Globe,
 } from 'lucide-react';
-import { getApiHeaders } from '../utils/apiClient';
+import { getAsyncApiHeaders } from '../utils/apiClient';
 
 interface GroundingSource {
   title: string;
@@ -77,9 +77,10 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
         content: m.content,
       }));
 
+      const headers = await getAsyncApiHeaders();
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: getApiHeaders(),
+        headers,
         body: JSON.stringify({ messages: historyPayload }),
       });
 

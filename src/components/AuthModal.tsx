@@ -164,12 +164,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             className="w-full py-3 px-4 rounded-xl bg-white/[0.07] hover:bg-white/[0.14] text-white font-semibold text-xs flex items-center justify-center gap-2.5 border border-white/15 transition-all cursor-pointer active:scale-99"
           >
             <ShieldCheck className="w-4 h-4 text-emerald-300" />
-            <span>Sign In with Google Account</span>
+            <span>Sign In with Google (Auto-Merge Studio Vault)</span>
           </button>
 
-          <p className="text-[11px] text-white/50 text-center leading-relaxed pt-1">
-            No passwords are collected or stored by VibeCast Studio. Cloud take history is protected by Firebase Authentication.
-          </p>
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-[11px] text-emerald-100/90 leading-relaxed space-y-1">
+            <p className="font-semibold text-emerald-300 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Zero-Loss Hybrid Audio Vault</span>
+            </p>
+            <p className="text-white/70">
+              All generated takes &amp; scripts are permanently stored in your browser&apos;s IndexedDB Vault and automatically merge into your Google Cloud account when you sign in.
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -19,6 +19,10 @@ import {
 import { auth, googleProvider, db } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 import { GeneratedClip } from '../types';
+import {
+  loadAllStoredTakesFromVault,
+  mergeAndHydrateTakes,
+} from '../utils/audioStorage';
 
 export interface UserProfile {
   id: string;
@@ -47,6 +51,7 @@ interface AuthContextType {
   saveTakeToCloud: (take: GeneratedClip) => Promise<void>;
   fetchUserTakes: () => Promise<GeneratedClip[]>;
   deleteTakeFromCloud: (takeId: string) => Promise<void>;
+  mergeLocalVaultToCloud: () => Promise<{ mergedTakes: GeneratedClip[]; newlyUploadedCount: number }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -496,6 +501,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Non-destructively merges all local IndexedDB / Guest Studio takes with the user's Cloud Firestore takes.
+   * Any local takes that haven't been synced to Firestore yet are automatically uploaded so zero data is ever lost.
+   */
+  const mergeLocalVaultToCloud = async (): Promise<{
+    mergedTakes: GeneratedClip[];
+    newlyUploadedCount: number;
+  }> => {
+    const localTakes = await loadAllStoredTakesFromVault();
+    if (!user || user.uid === 'local-studio-creator') {
+      return { mergedTakes: localTakes, newlyUploadedCount: 0 };
+    }
+
+    const cloudTakes = await fetchUserTakes();
+    const cloudIds = new Set(cloudTakes.map((c) => c.id));
+
+    let newlyUploadedCount = 0;
+    for (const localClip of localTakes) {
+      if (!cloudIds.has(localClip.id)) {
+        await saveTakeToCloud(localClip);
+        newlyUploadedCount++;
+      }
+    }
+
+    const mergedTakes = await mergeAndHydrateTakes(cloudTakes);
+
+    // Sync totalTakes counter on userProfile if new takes were merged
+    if (newlyUploadedCount > 0 && userProfile) {
+      const updatedTotalTakes = Math.max(userProfile.totalTakes || 0, mergedTakes.length);
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          totalTakes: updatedTotalTakes,
+        });
+        setUserProfile((prev) => (prev ? { ...prev, totalTakes: updatedTotalTakes } : null));
+      } catch {}
+    }
+
+    return { mergedTakes, newlyUploadedCount };
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -511,6 +557,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveTakeToCloud,
         fetchUserTakes,
         deleteTakeFromCloud,
+        mergeLocalVaultToCloud,
         refreshProfile,
       }}
     >
@@ -526,3 +573,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

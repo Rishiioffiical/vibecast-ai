@@ -22,6 +22,7 @@ import {
   EXPORT_FORMAT_OPTIONS,
   exportAudioInFormat,
 } from '../utils/audioSynthesis';
+import { buildShareUrl } from '../utils/share';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -51,6 +52,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [volume, setVolume] = useState<number>(1);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [isShareLinkCopied, setIsShareLinkCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'audio' | 'script'>('audio');
   const [showOptions, setShowOptions] = useState<boolean>(false);
   const [selectedFormat, setSelectedFormat] = useState<AudioExportFormat>('mp3');
@@ -121,6 +123,14 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   }, []);
 
   const togglePlay = () => {
+    if (!audioUrl || !audioUrl.trim()) {
+      if (onResynthesize) {
+        onResynthesize(scriptSnippet);
+      } else {
+        setAudioLoadError('Saved take metadata loaded. Click Re-Synthesize to generate fresh 24kHz audio.');
+      }
+      return;
+    }
     const el = audioRef.current;
     if (!el || audioLoadError) return;
     if (el.paused) {
@@ -134,6 +144,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   };
 
   const handleRestart = () => {
+    if (!audioUrl || !audioUrl.trim()) {
+      if (onResynthesize) {
+        onResynthesize(scriptSnippet);
+      }
+      return;
+    }
     const el = audioRef.current;
     if (!el || audioLoadError) return;
     el.currentTime = 0;
@@ -190,7 +206,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
     setShowExportMenu(false);
     setShowOptions(false);
-    if (audioLoadError) return;
+    if (audioLoadError || !audioUrl || !audioUrl.trim()) {
+      setAudioLoadError('Audio binary not cached on this device yet. Click Play or Re-Synthesize to generate 24kHz audio.');
+      return;
+    }
     setIsExporting(true);
     try {
       await exportAudioInFormat(audioUrl, targetFormat, scriptSnippet, speedMultiplier);
@@ -217,52 +236,64 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const remainingSeconds = Math.max(0, duration - currentTime);
   const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
 
-  const appUrl = typeof window !== 'undefined' ? window.location.href : 'https://vibecast.studio';
-  const cleanSnippet = scriptSnippet ? `"${scriptSnippet.slice(0, 140).trim()}..."` : 'Studio Audio Take';
-  const audioRefText =
-    audioUrl && audioUrl.startsWith('http') && !audioUrl.startsWith('blob:')
-      ? `\nDirect Audio Link: ${audioUrl}`
-      : '';
+  const shareDeepLink =
+    typeof window !== 'undefined'
+      ? buildShareUrl({
+          text: scriptSnippet,
+          voiceName,
+          emotionLabel,
+          speed: speedMultiplier,
+        })
+      : 'https://vibecast.studio';
 
-  const shareMessage = `*VibeCast Studio Master Take*\nVoice: ${voiceName}\nCadence: ${emotionLabel}\nScript: ${cleanSnippet}${audioRefText}\n\nOpen in VibeCast Studio: ${appUrl}`;
-  const whatsappShareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareDeepLink);
+      setIsShareLinkCopied(true);
+      setTimeout(() => setIsShareLinkCopied(false), 2200);
+    } catch (e) {
+      console.warn(e);
+    }
+  };
 
   return (
     <div className="w-full rounded-[28px] spatial-glass border border-white/15 shadow-2xl overflow-hidden transition-all text-[var(--text-primary)] relative">
-      {/* Hidden Native Audio Engine */}
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        preload="metadata"
-        onPlay={() => {
-          setIsPlaying(true);
-          onPlayingChange?.(true);
-        }}
-        onPause={() => {
-          setIsPlaying(false);
-          onPlayingChange?.(false);
-        }}
-        onEnded={() => {
-          setIsPlaying(false);
-          onPlayingChange?.(false);
-          setCurrentTime(0);
-        }}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => {
-          setAudioLoadError(null);
-          const dur = e.currentTarget.duration;
-          if (Number.isFinite(dur)) {
-            setDuration(dur);
-          }
-          e.currentTarget.playbackRate = speedMultiplier;
-          e.currentTarget.volume = isMuted ? 0 : volume;
-        }}
-        onError={() => {
-          setIsPlaying(false);
-          onPlayingChange?.(false);
-          setAudioLoadError('Temporary audio link from a past browser session expired. Re-synthesize to play or export.');
-        }}
-      />
+      {/* Hidden Native Audio Engine — Only render when audioUrl is a valid non-empty URL to prevent React empty src warning */}
+      {Boolean(audioUrl && audioUrl.trim()) && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onPlay={() => {
+            setIsPlaying(true);
+            onPlayingChange?.(true);
+          }}
+          onPause={() => {
+            setIsPlaying(false);
+            onPlayingChange?.(false);
+          }}
+          onEnded={() => {
+            setIsPlaying(false);
+            onPlayingChange?.(false);
+            setCurrentTime(0);
+          }}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => {
+            setAudioLoadError(null);
+            const dur = e.currentTarget.duration;
+            if (Number.isFinite(dur)) {
+              setDuration(dur);
+            }
+            e.currentTarget.playbackRate = speedMultiplier;
+            e.currentTarget.volume = isMuted ? 0 : volume;
+          }}
+          onError={() => {
+            setIsPlaying(false);
+            onPlayingChange?.(false);
+            setAudioLoadError('Temporary audio link from a past browser session expired. Re-synthesize to play or export.');
+          }}
+        />
+      )}
 
       {/* Top Deck Header: Mode Switcher & Actions */}
       <div className="px-6 py-4 flex items-center justify-between border-b border-white/10">
@@ -303,16 +334,19 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
         {/* Share & More Options */}
         <div className="flex items-center gap-2">
-          <a
-            href={whatsappShareUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={handleCopyShareLink}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.14] border border-white/12 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
-            title="Share Audio on WhatsApp"
+            title="Copy Shareable Studio Take Link"
           >
-            <Share2 className="w-3.5 h-3.5 text-[#38D9A9]" />
-            <span>Share</span>
-          </a>
+            {isShareLinkCopied ? (
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5 text-[#38D9A9]" />
+            )}
+            <span>{isShareLinkCopied ? 'Link Copied' : 'Share Link'}</span>
+          </button>
 
           <div className="relative" ref={optionsMenuRef}>
             <button

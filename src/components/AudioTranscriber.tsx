@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
-import { getApiHeaders } from '../utils/apiClient';
+import { getAsyncApiHeaders } from '../utils/apiClient';
 
 interface AudioTranscriberProps {
   onTranscriptionComplete: (text: string) => void;
@@ -88,10 +88,11 @@ export const AudioTranscriber: React.FC<AudioTranscriberProps> = ({
       reader.readAsDataURL(blob);
 
       const base64Audio = await base64Promise;
+      const headers = await getAsyncApiHeaders();
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
-        headers: getApiHeaders(),
+        headers,
         body: JSON.stringify({
           audio: base64Audio,
           mimeType,

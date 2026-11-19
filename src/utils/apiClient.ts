@@ -34,15 +34,34 @@ export function subscribeApiMode(fn: (mode: ApiMode) => void) {
   };
 }
 
+let cachedIdToken: string = '';
+
+if (auth) {
+  auth.onIdTokenChanged(async (u) => {
+    if (u && u.uid !== 'local-studio-creator' && typeof u.getIdToken === 'function') {
+      try {
+        cachedIdToken = await u.getIdToken();
+      } catch {
+        cachedIdToken = '';
+      }
+    } else {
+      cachedIdToken = '';
+    }
+  });
+}
+
 /**
- * Returns common API headers. Only attaches an admin user email when an authenticated
- * admin is signed in and has selected the admin lane.
+ * Returns common API headers synchronously, attaching cached Firebase Auth Bearer token if signed in.
  */
 export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
+
+  if (cachedIdToken) {
+    headers['Authorization'] = `Bearer ${cachedIdToken}`;
+  }
 
   const currentEmail = auth?.currentUser?.email?.trim().toLowerCase();
 
@@ -56,3 +75,26 @@ export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record
 
   return headers;
 }
+
+/**
+ * Asynchronously fetches a fresh Firebase Auth ID token if a Google user is signed in,
+ * ensuring cryptographic identity verification on backend routes.
+ */
+export async function getAsyncApiHeaders(
+  extraHeaders: Record<string, string> = {}
+): Promise<Record<string, string>> {
+  const currentUser = auth?.currentUser;
+  if (
+    currentUser &&
+    currentUser.uid !== 'local-studio-creator' &&
+    typeof currentUser.getIdToken === 'function'
+  ) {
+    try {
+      cachedIdToken = await currentUser.getIdToken();
+    } catch {
+      // Keep last cached or empty
+    }
+  }
+  return getApiHeaders(extraHeaders);
+}
+

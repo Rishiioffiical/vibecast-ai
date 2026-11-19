@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Languages, ArrowRightLeft, Loader2, Undo2 } from 'lucide-react';
-import { getApiHeaders } from '../utils/apiClient';
+import { getAsyncApiHeaders } from '../utils/apiClient';
 
 interface ScriptTranslatorProps {
   currentText: string;
@@ -29,9 +29,10 @@ export const ScriptTranslator: React.FC<ScriptTranslatorProps> = ({
     setTargetLangInProgress(targetLang);
 
     try {
+      const headers = await getAsyncApiHeaders();
       const response = await fetch('/api/ai/translate', {
         method: 'POST',
-        headers: getApiHeaders(),
+        headers,
         body: JSON.stringify({
           text: currentText,
           targetLang,

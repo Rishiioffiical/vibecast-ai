@@ -392,3 +392,92 @@ export async function clearAllTakesFromVault(): Promise<void> {
     console.warn('Failed to clear IndexedDB vault:', e);
   }
 }
+
+export interface StudioVaultBackupPayload {
+  version: number;
+  exportedAt: string;
+  app: 'VibeCast AI Studio';
+  takes: GeneratedClip[];
+  activeDraft?: {
+    scriptText?: string;
+    selectedVoiceId?: string;
+    selectedEmotionId?: string;
+    speed?: number;
+  };
+}
+
+/**
+ * Exports all takes and current script draft as a portable JSON backup file.
+ */
+export function exportVaultBackupJson(
+  clips: GeneratedClip[],
+  draft?: StudioVaultBackupPayload['activeDraft']
+): void {
+  const sanitizedTakes = clips.map((c) => ({
+    ...c,
+    // Do not export session-only blob: URLs; they will auto-hydrate from IndexedDB or TTS on play
+    audioUrl: c.audioUrl && !c.audioUrl.startsWith('blob:') ? c.audioUrl : '',
+  }));
+
+  const payload: StudioVaultBackupPayload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    app: 'VibeCast AI Studio',
+    takes: sanitizedTakes,
+    activeDraft: draft,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateTag = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `vibecast_studio_vault_${dateTag}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/**
+ * Parses and merges a portable Studio Vault JSON backup file into the local IndexedDB & metadata store.
+ */
+export async function importVaultBackupJson(
+  jsonText: string
+): Promise<{ takes: GeneratedClip[]; importedCount: number; draft?: StudioVaultBackupPayload['activeDraft'] }> {
+  const parsed = JSON.parse(jsonText) as StudioVaultBackupPayload;
+  if (!parsed || !Array.isArray(parsed.takes)) {
+    throw new Error('Invalid VibeCast Vault backup file format.');
+  }
+
+  const validIncoming: GeneratedClip[] = [];
+  for (const item of parsed.takes) {
+    if (item && typeof item.id === 'string' && typeof item.text === 'string' && item.text.trim()) {
+      validIncoming.push({
+        id: item.id,
+        title: item.title || item.text.slice(0, 42),
+        text: item.text,
+        audioUrl: item.audioUrl && !item.audioUrl.startsWith('blob:') ? item.audioUrl : '',
+        voiceName: item.voiceName || 'Siddharth (Indian Accent)',
+        language: item.language === 'english' ? 'english' : 'hindi',
+        emotionLabel: item.emotionLabel || 'Educational',
+        speed: Number(item.speed) || 1.0,
+        duration: Number(item.duration) || 5,
+        timestamp: Number(item.timestamp) || Date.now(),
+        engine: 'gemini',
+      });
+    }
+  }
+
+  for (const clip of validIncoming) {
+    await saveAudioTakeToVault(clip);
+  }
+
+  const merged = await loadAllStoredTakesFromVault();
+  return {
+    takes: merged,
+    importedCount: validIncoming.length,
+    draft: parsed.activeDraft,
+  };
+}
+

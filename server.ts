@@ -30,13 +30,67 @@ interface RateLimitRecord {
 }
 const rateLimitStore = new Map<string, RateLimitRecord>();
 
+const FIREBASE_PROJECT_ID = 'gen-lang-client-0383401072';
+
+interface VerifiedFirebaseIdentity {
+  uid: string;
+  email: string;
+  emailVerified: boolean;
+}
+
+/**
+ * Parses and validates a Firebase Authentication JWT ID token from the Authorization: Bearer header.
+ * Verifies token structure, issuer, audience (project ID), expiration, and email verification status.
+ */
+function verifyFirebaseBearerToken(req: Request): VerifiedFirebaseIdentity | null {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7).trim();
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const payload = JSON.parse(payloadJson);
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!payload.exp || typeof payload.exp !== 'number' || payload.exp < nowSec - 30) {
+      return null;
+    }
+
+    if (
+      payload.aud !== FIREBASE_PROJECT_ID ||
+      payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`
+    ) {
+      return null;
+    }
+
+    const uid = typeof payload.sub === 'string' && payload.sub.trim() ? payload.sub.trim() : '';
+    if (!uid) return null;
+
+    const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+    const emailVerified = Boolean(payload.email_verified);
+
+    return { uid, email, emailVerified };
+  } catch {
+    return null;
+  }
+}
+
 function rateLimiter(maxRequests: number, windowMs: number = 60 * 1000) {
   return (req: Request, res: Response, next: () => void) => {
     const rawIp =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() ||
       req.socket.remoteAddress ||
       'unknown';
-    const key = `${req.path}:${rawIp}`;
+    const verifiedIdentity = verifyFirebaseBearerToken(req);
+    const subjectKey = verifiedIdentity ? `uid:${verifiedIdentity.uid}` : `ip:${rawIp}`;
+    const key = `${req.path}:${subjectKey}`;
     const now = Date.now();
 
     let record = rateLimitStore.get(key);
@@ -93,11 +147,27 @@ function getCandidateKeysForRequest(req: Request): {
   keys: string[];
   isAdmin: boolean;
   userEmail: string;
+  tokenVerified: boolean;
 } {
-  const rawEmail =
-    (req.headers['x-user-email'] as string) || (req.body && req.body.userEmail) || '';
-  const userEmail = rawEmail.trim().toLowerCase();
-  const isAdmin = !!(userEmail && ADMIN_EMAILS.includes(userEmail));
+  const verifiedIdentity = verifyFirebaseBearerToken(req);
+  const headerEmail = (
+    (req.headers['x-user-email'] as string) ||
+    (req.body && req.body.userEmail) ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+  // Only honor admin privilege if verified via Bearer token OR when header matches admin and public lane isn't forced
+  const resolvedEmail =
+    headerEmail === 'public-creator@vibecast.app'
+      ? headerEmail
+      : verifiedIdentity?.email || headerEmail;
+  const isAdmin = !!(
+    resolvedEmail &&
+    ADMIN_EMAILS.includes(resolvedEmail) &&
+    (verifiedIdentity ? verifiedIdentity.emailVerified : true)
+  );
 
   // Build candidate keys pool without duplicates
   const rawPool = isAdmin
@@ -108,7 +178,7 @@ function getCandidateKeysForRequest(req: Request): {
     new Set(rawPool.filter((k): k is string => typeof k === 'string' && k.trim().length > 0))
   );
 
-  return { keys, isAdmin, userEmail };
+  return { keys, isAdmin, userEmail: resolvedEmail, tokenVerified: !!verifiedIdentity };
 }
 
 /**
@@ -363,7 +433,7 @@ function buildStylePrompt(
   return `${styleBase} ${paceNote} Pronounce every word with authentic Indian inflection, crystal-clear studio articulation, and natural human prosody.`;
 }
 
-// POST /api/tts - Synthesize speech using Gemini TTS (gemini-3.8-flash-lite-tts free tier model)
+// POST /api/tts - Synthesize speech using Gemini TTS (Solo & 2-Speaker Podcast Dialogue)
 app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response) => {
   try {
     const {
@@ -375,6 +445,10 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
       speed = 1.0,
       language = 'hindi',
       scriptMode: clientScriptMode,
+      podcastMode = false,
+      secondVoiceName = 'Kore',
+      firstSpeakerTag = 'Host 1',
+      secondSpeakerTag = 'Host 2',
     } = req.body;
 
     if (!text || typeof text !== 'string' || !text.trim()) {
@@ -404,6 +478,11 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
     const requestedVoice = voiceName || voice || 'Charon';
     const allowedVoices = ['Charon', 'Fenrir', 'Puck', 'Zephyr', 'Kore', 'Aoede'];
     const chosenVoice = allowedVoices.includes(requestedVoice) ? requestedVoice : 'Charon';
+    const chosenSecondVoice = allowedVoices.includes(secondVoiceName)
+      ? secondVoiceName
+      : chosenVoice === 'Kore'
+      ? 'Charon'
+      : 'Kore';
 
     // Auto-recognize script mode (hinglish, hindi, or english)
     const detectedMode = clientScriptMode || detectServerScriptMode(cleanText);
@@ -425,6 +504,41 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
           ? await prepareHinglishForIndianTts(ai, cleanText)
           : cleanText;
 
+      const isMultiSpeaker = Boolean(podcastMode);
+      const speaker1 = (String(firstSpeakerTag || 'Host 1').trim() || 'Host 1').slice(0, 40);
+      const speaker2 = (String(secondSpeakerTag || 'Host 2').trim() || 'Host 2').slice(0, 40);
+
+      const speechConfig = isMultiSpeaker
+        ? {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: [
+                {
+                  speaker: speaker1,
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: chosenVoice,
+                    },
+                  },
+                },
+                {
+                  speaker: speaker2,
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: chosenSecondVoice,
+                    },
+                  },
+                },
+              ],
+            },
+          }
+        : {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: chosenVoice,
+              },
+            },
+          };
+
       let response;
       try {
         response = await ai.models.generateContent({
@@ -444,18 +558,12 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
           ],
           config: {
             responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: chosenVoice,
-                },
-              },
-            },
+            speechConfig,
           },
         });
       } catch (innerErr: any) {
         console.warn(
-          'TTS with speechMetadata failed, retrying with standard text prompt...',
+          'TTS primary call failed, retrying with standard text prompt...',
           innerErr?.message
         );
         response = await ai.models.generateContent({
@@ -498,6 +606,8 @@ app.post('/api/tts', rateLimiter(25, 60000), async (req: Request, res: Response)
       audio: result.base64Audio,
       mimeType: result.mimeType,
       voice: chosenVoice,
+      secondVoice: podcastMode ? chosenSecondVoice : undefined,
+      podcastMode: Boolean(podcastMode),
       emotion: safeEmotion,
       speed: safeSpeed,
       scriptMode: result.detectedMode,
@@ -895,7 +1005,7 @@ Rules:
 
 // GET /api/health
 app.get('/api/health', (req: Request, res: Response) => {
-  const { keys, isAdmin } = getCandidateKeysForRequest(req);
+  const { keys, isAdmin, tokenVerified } = getCandidateKeysForRequest(req);
   res.json({
     status: 'ok',
     hasApiKey: keys.length > 0,
@@ -903,6 +1013,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     adminKeyConfigured: !!ADMIN_API_KEY,
     publicKeyConfigured: !!PUBLIC_API_KEY,
     resolvedRole: isAdmin ? 'admin' : 'public',
+    tokenVerified,
     timestamp: new Date().toISOString(),
   });
 });

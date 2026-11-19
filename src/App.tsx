@@ -27,6 +27,12 @@ import {
   Clock,
   ShieldCheck,
   RotateCcw,
+  Users,
+  Download,
+  Upload,
+  Database,
+  Share2,
+  X,
 } from 'lucide-react';
 import { ALL_VOICES, EMOTIONS, SAMPLE_SCRIPTS } from './data/voices';
 import { GeneratedClip, SampleScript } from './types';
@@ -34,7 +40,17 @@ import {
   callGeminiTts,
   estimateDurationSec,
 } from './utils/audioSynthesis';
+import {
+  saveAudioTakeToVault,
+  loadAllStoredTakesFromVault,
+  ensurePlayableClipAudio,
+  deleteTakeFromVault,
+  clearAllTakesFromVault,
+  exportVaultBackupJson,
+  importVaultBackupJson,
+} from './utils/audioStorage';
 import { recognizeScript } from './utils/scriptRecognition';
+import { readSharePayload, StudioSharePayload } from './utils/share';
 import { getActiveApiMode, subscribeApiMode, ApiMode } from './utils/apiClient';
 import { AudioPlayer } from './components/AudioPlayer';
 import { AudioTranscriber } from './components/AudioTranscriber';
@@ -99,11 +115,26 @@ export default function App() {
     deductCredits,
     resetDailyQuotaManually,
     saveTakeToCloud,
-    fetchUserTakes,
     deleteTakeFromCloud,
+    mergeLocalVaultToCloud,
   } = useAuth();
 
-  const [scriptText, setScriptText] = useState<string>(SAMPLE_SCRIPTS[0].text);
+  // Persistent Live Script Draft: Auto-saves every edit so refresh never loses in-progress work
+  const [scriptText, setScriptText] = useState<string>(() => {
+    try {
+      const savedDraft = localStorage.getItem('vibecast_active_script_draft');
+      if (savedDraft && savedDraft.trim().length > 0) {
+        return savedDraft;
+      }
+    } catch {}
+    return SAMPLE_SCRIPTS[0].text;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vibecast_active_script_draft', scriptText);
+    } catch {}
+  }, [scriptText]);
 
   // Persistent Voice Lock: Uses the exact same voice every time until manually changed by the user
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>(() => {
@@ -115,6 +146,28 @@ export default function App() {
     } catch {}
     return 'indian-edu-siddharth';
   });
+
+  // 2-Host Podcast Dialogue Mode & Co-Host Voice selection
+  const [podcastMode, setPodcastMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('vibecast_podcast_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [secondVoiceId, setSecondVoiceId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('vibecast_second_voice_id');
+      if (saved && ALL_VOICES.some((v) => v.id === saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'female-ananya';
+  });
+
+  // Audience Shared Take (?take=) Quick-Listen Showcase state
+  const [sharedTakeBanner, setSharedTakeBanner] = useState<StudioSharePayload | null>(null);
 
   const [selectedEmotionId, setSelectedEmotionId] = useState<string>(() => {
     try {
@@ -151,6 +204,26 @@ export default function App() {
     try {
       localStorage.setItem('vibecast_selected_voice_id', newVoiceId);
     } catch {}
+  };
+
+  const handleManualSecondVoiceChange = (newVoiceId: string) => {
+    setSecondVoiceId(newVoiceId);
+    try {
+      localStorage.setItem('vibecast_second_voice_id', newVoiceId);
+    } catch {}
+  };
+
+  const handleTogglePodcastMode = (enablePodcast: boolean) => {
+    setPodcastMode(enablePodcast);
+    try {
+      localStorage.setItem('vibecast_podcast_mode', String(enablePodcast));
+    } catch {}
+    if (enablePodcast && !scriptText.includes('Host 1:') && !scriptText.includes('Host 2:')) {
+      setScriptText(
+        `Host 1: Namaskar doston! Aaj ke is podcast episode mein hum samjhenge ki AI aur Quantum Computing duniya ko kaise badal rahe hain.\n\nHost 2: Bilkul! Aur sabse interesting baat yeh hai ki Bharat ke young engineers aur creators is revolution ko lead kar rahe hain.`
+      );
+      setSuccessNotice('2-Host Podcast Dialogue mode active! Use "Host 1:" and "Host 2:" lines.');
+    }
   };
 
   const handleManualEmotionChange = (newEmotionId: string) => {
@@ -250,6 +323,7 @@ export default function App() {
   const [voiceFilter, setVoiceFilter] = useState<'all' | 'hindi-male' | 'english-male' | 'female'>('all');
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isHydratingTakeId, setIsHydratingTakeId] = useState<string | null>(null);
   const [generationTime, setGenerationTime] = useState<number>(0);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -268,8 +342,10 @@ export default function App() {
   const consoleSectionRef = useRef<HTMLDivElement>(null);
   const presetsSectionRef = useRef<HTMLDivElement>(null);
   const historySectionRef = useRef<HTMLDivElement>(null);
+  const vaultImportInputRef = useRef<HTMLInputElement>(null);
 
   const selectedVoice = ALL_VOICES.find((v) => v.id === selectedVoiceId) || ALL_VOICES[0];
+  const secondVoice = ALL_VOICES.find((v) => v.id === secondVoiceId) || ALL_VOICES[ALL_VOICES.length - 1];
   const selectedEmotion = EMOTIONS.find((e) => e.id === selectedEmotionId) || EMOTIONS[0];
 
   // Real-time Script Recognition (Devanagari Hindi, Hinglish, or Indian English)
@@ -304,16 +380,122 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Load user cloud takes when signed in
+  // 1. Hydrate takes from local IndexedDB Audio Vault immediately on mount, and check for shared ?take= link
   useEffect(() => {
-    if (user) {
-      fetchUserTakes().then((cloudTakes) => {
-        if (cloudTakes && cloudTakes.length > 0) {
-          setClipHistory(cloudTakes);
+    loadAllStoredTakesFromVault().then((localTakes) => {
+      if (localTakes.length > 0) {
+        setClipHistory(localTakes);
+        const firstPlayable = localTakes.find((t) => Boolean(t.audioUrl && t.audioUrl.trim()));
+        if (firstPlayable) {
+          setActiveClip((prev) => prev || firstPlayable);
         }
-      });
+      }
+    });
+
+    if (typeof window !== 'undefined') {
+      const shared = readSharePayload(window.location.search);
+      if (shared && shared.text) {
+        setSharedTakeBanner(shared);
+        setScriptText(shared.text);
+        if (shared.speed && !isNaN(Number(shared.speed))) {
+          handleManualSpeedChange(Number(shared.speed));
+        }
+        if (shared.voiceId && ALL_VOICES.some((v) => v.id === shared.voiceId)) {
+          handleManualVoiceChange(shared.voiceId);
+        } else if (shared.voiceName) {
+          const matched = ALL_VOICES.find((v) =>
+            shared.voiceName!.toLowerCase().includes(v.name.toLowerCase())
+          );
+          if (matched) handleManualVoiceChange(matched.id);
+        }
+      }
     }
-  }, [user]);
+  }, []);
+
+  // 2. When user signs in (or switches from Guest to Google), non-destructively auto-merge local IndexedDB vault with Cloud Firestore
+  useEffect(() => {
+    let cancelled = false;
+    mergeLocalVaultToCloud().then(({ mergedTakes, newlyUploadedCount }) => {
+      if (cancelled) return;
+      if (mergedTakes.length > 0) {
+        setClipHistory(mergedTakes);
+        const firstPlayable = mergedTakes.find((t) => Boolean(t.audioUrl && t.audioUrl.trim()));
+        if (firstPlayable) {
+          setActiveClip((prev) => prev || firstPlayable);
+        }
+      }
+      if (newlyUploadedCount > 0 && user && user.uid !== 'local-studio-creator') {
+        setSuccessNotice(
+          `Synced & merged ${newlyUploadedCount} local studio ${
+            newlyUploadedCount === 1 ? 'take' : 'takes'
+          } into your Google Cloud Vault.`
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  // Select or auto-hydrate a take from the Session Archive (re-synthesizing from cloud metadata if binary WAV isn't cached locally)
+  const handleSelectArchiveTake = async (clip: GeneratedClip) => {
+    setErrorNotice(null);
+    setIsHydratingTakeId(clip.id);
+    try {
+      const { clip: playableClip, reSynthesized } = await ensurePlayableClipAudio(clip);
+      setActiveClip(playableClip);
+      setClipHistory((prev) => prev.map((c) => (c.id === playableClip.id ? playableClip : c)));
+      if (reSynthesized) {
+        setSuccessNotice(`Restored & cached 24kHz WAV master for "${playableClip.title}" in your local Audio Vault.`);
+      }
+      setTimeout(() => {
+        playerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    } catch (err: any) {
+      setErrorNotice(err?.message || 'Could not restore audio for this take.');
+    } finally {
+      setIsHydratingTakeId(null);
+    }
+  };
+
+  // Export entire Studio Vault as portable JSON backup
+  const handleExportVaultBackup = () => {
+    exportVaultBackupJson(clipHistory, {
+      scriptText,
+      selectedVoiceId,
+      selectedEmotionId,
+      speed,
+    });
+    setSuccessNotice(`Exported ${clipHistory.length} studio takes & active script draft to JSON backup.`);
+  };
+
+  // Import Studio Vault JSON backup file
+  const handleImportVaultFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const { takes, importedCount, draft } = await importVaultBackupJson(text);
+      setClipHistory(takes);
+      if (takes.length > 0 && !activeClip) {
+        setActiveClip(takes[0]);
+      }
+      if (draft?.scriptText && !scriptText.trim()) {
+        setScriptText(draft.scriptText);
+      }
+      // Also sync imported takes to Cloud Firestore if signed in with Google
+      if (user && user.uid !== 'local-studio-creator') {
+        for (const t of takes.slice(0, 15)) {
+          await saveTakeToCloud(t);
+        }
+      }
+      setSuccessNotice(`Restored ${importedCount} studio takes into your Audio Vault!`);
+    } catch (err: any) {
+      setErrorNotice(err?.message || 'Could not import Vault JSON backup file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
 
   // Main generate audio handler
   const handleGenerateAudio = async () => {
@@ -355,35 +537,49 @@ export default function App() {
         speed: speed,
         language: selectedVoice.language,
         scriptMode: scriptRecognition.scriptType,
+        podcastMode,
+        secondVoiceName: secondVoice.geminiVoice,
+        secondVoiceLabel: secondVoice.name,
+        firstSpeakerTag: 'Host 1',
+        secondSpeakerTag: 'Host 2',
       });
+
+      const voiceDisplay = podcastMode
+        ? `${selectedVoice.name.split(' ')[0]} + ${secondVoice.name.split(' ')[0]} (2-Host Podcast)`
+        : `${selectedVoice.name} (${selectedVoice.accent})`;
 
       const newClip: GeneratedClip = {
         id: `clip-${Date.now()}`,
         title: scriptText.slice(0, 42).trim() + (scriptText.length > 42 ? '...' : ''),
         text: scriptText,
         audioUrl: result.audioUrl,
-        voiceName: `${selectedVoice.name} (${selectedVoice.accent})`,
+        voiceName: voiceDisplay,
         language: selectedVoice.language,
-        emotionLabel: `${selectedEmotion.label} · ${scriptRecognition.shortBadge}`,
+        emotionLabel: `${podcastMode ? 'Podcast · ' : ''}${selectedEmotion.label} · ${scriptRecognition.shortBadge}`,
         speed: speed,
         duration: estimatedSeconds,
         timestamp: Date.now(),
         engine: result.engine,
       };
 
-      // Record daily quota deduction
+      // 1. Persist binary WAV Blob + metadata into IndexedDB Audio Vault immediately (Zero-Loss guarantee)
+      await saveAudioTakeToVault(newClip, result.blob);
+
+      // 2. Record daily quota deduction
       recordUsage(scriptText.length);
 
-      // Deduct user credits and sync take to cloud Firestore if signed in
+      // 3. Deduct user credits and sync take metadata to cloud Firestore if signed in
       if (user) {
         await deductCredits(scriptText.length);
         await saveTakeToCloud(newClip);
       }
 
       setActiveClip(newClip);
-      setClipHistory((prev) => [newClip, ...prev]);
+      setClipHistory((prev) => [newClip.id ? newClip : newClip, ...prev.filter((c) => c.id !== newClip.id)]);
       setSuccessNotice(
-        `Synthesized with locked voice "${selectedVoice.name}" [${scriptRecognition.label}] (${scriptText.length} chars)`
+        podcastMode
+          ? `Synthesized 2-Host Podcast (${selectedVoice.name.split(' ')[0]} & ${secondVoice.name.split(' ')[0]}) · Saved to Audio Vault`
+          : `Synthesized with locked voice "${selectedVoice.name}" [${scriptRecognition.label}] · Saved to Audio Vault`
       );
 
       // Scroll to player
@@ -442,14 +638,16 @@ export default function App() {
   };
 
   // Clear History Handler
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
+    await clearAllTakesFromVault();
     setClipHistory([]);
-    setSuccessNotice('Session recording history cleared.');
+    setSuccessNotice('Local Audio Vault & session archive cleared.');
   };
 
   // Delete single take
   const handleDeleteTake = async (clipId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    await deleteTakeFromVault(clipId);
     setClipHistory((prev) => prev.filter((c) => c.id !== clipId));
     if (activeClip?.id === clipId) {
       setActiveClip(null);
@@ -580,10 +778,21 @@ export default function App() {
               <Palette className="w-3.5 h-3.5" style={{ color: currentTheme.accent }} />
             </button>
 
+            <input
+              ref={vaultImportInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportVaultFile}
+              className="hidden"
+            />
+
             <UserAccountBadge
               onOpenAuth={() => setIsAuthOpen(true)}
               onOpenPremium={() => setIsPremiumOpen(true)}
               onOpenAdminKey={() => setIsAdminKeyModalOpen(true)}
+              vaultCount={clipHistory.length}
+              onExportVault={handleExportVaultBackup}
+              onImportVault={() => vaultImportInputRef.current?.click()}
             />
           </div>
         </div>
@@ -591,6 +800,46 @@ export default function App() {
 
       {/* Main Studio Workstation */}
       <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 relative z-10">
+        {/* 1-Click Audience Share Showcase Card (renders when someone opens a shared ?take= link) */}
+        {sharedTakeBanner && (
+          <div className="spatial-glass rounded-[24px] p-5 border border-emerald-400/40 bg-emerald-950/55 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-[#2E4E3B] text-emerald-200 font-bold border border-emerald-400/35">
+                  <Share2 className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>SHARED VOICEOVER SHOWCASE</span>
+                </span>
+                <span className="text-white/75 font-mono-numbers">
+                  Voice: {sharedTakeBanner.voiceName || selectedVoice.name} · {sharedTakeBanner.speed || 1}x
+                </span>
+              </div>
+              <p className="text-sm sm:text-base text-white/95 font-serif-display italic line-clamp-2">
+                &ldquo;{sharedTakeBanner.text}&rdquo;
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleGenerateAudio}
+                disabled={isGenerating}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2E4E3B] hover:bg-[#254030] border border-emerald-400/40 text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-current text-emerald-300" />
+                <span>{isGenerating ? 'Synthesizing...' : 'Play Shared Voiceover'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSharedTakeBanner(null)}
+                className="p-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+                title="Dismiss shared banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Kinetic Editorial Studio HUD Strip & 3D Acoustic Field Controls */}
         <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-5 border-b border-white/10">
           <div className="space-y-1.5">
@@ -602,7 +851,16 @@ export default function App() {
               <span>{scriptRecognition.shortBadge}</span>
               <span>·</span>
               <span>
-                {isVoiceLocked ? `Locked: ${selectedVoice.name.split(' ')[0]}` : selectedVoice.name.split(' ')[0]}
+                {podcastMode
+                  ? `2-Host Podcast (${selectedVoice.name.split(' ')[0]} + ${secondVoice.name.split(' ')[0]})`
+                  : isVoiceLocked
+                  ? `Locked: ${selectedVoice.name.split(' ')[0]}`
+                  : selectedVoice.name.split(' ')[0]}
+              </span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-300/90">
+                <Database className="w-3 h-3" />
+                <span>VAULT ({clipHistory.length})</span>
               </span>
               <span>·</span>
               <span className="inline-flex items-center gap-1 text-white/80">
@@ -830,14 +1088,51 @@ export default function App() {
 
             {/* 2. Voice & Performance Settings Card */}
             <div className="spatial-glass rounded-[28px] p-6 sm:p-7 shadow-2xl space-y-6">
+              {/* Studio Mode Switcher: Solo Voiceover vs 2-Host Podcast Dialogue */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2 text-xs text-white/80">
+                  <Users className="w-4 h-4 text-emerald-300" />
+                  <span className="font-bold text-white">Production Format</span>
+                </div>
+                <div className="inline-flex items-center gap-1 bg-black/45 p-1 rounded-xl border border-white/12 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePodcastMode(false)}
+                    className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                      !podcastMode
+                        ? 'bg-[#2E4E3B] text-white border border-emerald-400/35 shadow-xs'
+                        : 'text-white/65 hover:text-white'
+                    }`}
+                  >
+                    Solo Voiceover
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePodcastMode(true)}
+                    className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      podcastMode
+                        ? 'bg-[#E14B5A] text-white border border-[#FF8A98]/40 shadow-xs'
+                        : 'text-white/65 hover:text-white'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>2-Host Podcast</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Voice Filter & Dropdown */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <label htmlFor="voice-select" className="text-base text-white flex items-center gap-2">
                       <Volume2 className="w-4 h-4 text-[#FF8A98]" />
-                      <span className="font-bold-italic text-lg text-white">Voice</span>{' '}
-                      <span className="font-syne font-bold uppercase tracking-wider text-sm text-[#FF8A98]">Cast</span>
+                      <span className="font-bold-italic text-lg text-white">
+                        {podcastMode ? 'Host 1' : 'Voice'}
+                      </span>{' '}
+                      <span className="font-syne font-bold uppercase tracking-wider text-sm text-[#FF8A98]">
+                        {podcastMode ? 'Lead Voice' : 'Cast'}
+                      </span>
                     </label>
 
                     <button
@@ -906,6 +1201,38 @@ export default function App() {
                     {selectedVoice.badge || selectedVoice.accent}
                   </span>
                 </div>
+
+                {/* Co-Host Voice Selector when 2-Host Podcast Mode is active */}
+                {podcastMode && (
+                  <div className="pt-3 mt-3 border-t border-white/10 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <label htmlFor="second-voice-select" className="font-bold text-white flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>Host 2 · Co-Host Voice Persona</span>
+                      </label>
+                      <span className="text-[11px] font-mono-numbers text-emerald-300">
+                        Prefix lines with &ldquo;Host 1:&rdquo; &amp; &ldquo;Host 2:&rdquo;
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <select
+                        id="second-voice-select"
+                        value={secondVoiceId}
+                        onChange={(e) => handleManualSecondVoiceChange(e.target.value)}
+                        className="w-full bg-black/45 border border-emerald-400/30 hover:border-emerald-400/50 text-white text-sm font-semibold rounded-2xl px-4 py-3 appearance-none focus:outline-none focus:border-emerald-400 cursor-pointer transition-all pr-12 shadow-inner font-serif-display"
+                      >
+                        {ALL_VOICES.map((v) => (
+                          <option key={v.id} value={v.id} className="py-2 bg-[#111915] text-white">
+                            {v.name} — {v.tone} ({v.accent})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-300">
+                        <Sliders className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Emotional Mood Selection */}
@@ -1139,51 +1466,76 @@ export default function App() {
               </div>
             </div>
 
-            {/* Session Takes History Card */}
+            {/* Session Takes History & Zero-Loss Audio Vault Card */}
             <div ref={historySectionRef} className="spatial-glass rounded-[28px] p-6 sm:p-7 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
                 <div className="flex items-center gap-2">
                   <History className="w-4 h-4" style={{ color: currentTheme.accent }} />
                   <h3 className="text-base text-white">
-                    <span className="font-bold-italic text-lg text-white">Session</span>{' '}
+                    <span className="font-bold-italic text-lg text-white">Studio</span>{' '}
                     <span
                       className="font-syne font-bold uppercase tracking-wider text-xs"
                       style={{ color: currentTheme.accent }}
                     >
-                      Archive
+                      Audio Vault
                     </span>
                   </h3>
+                  <span className="text-[10px] font-mono-numbers px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-400/25">
+                    IndexedDB + Cloud
+                  </span>
                 </div>
 
-                {clipHistory.length > 0 && (
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={handleClearHistory}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-white/[0.06] hover:bg-rose-500/20 text-white/80 hover:text-rose-200 border border-white/12 transition-all cursor-pointer"
-                    title="Clear all generated recording history"
+                    onClick={handleExportVaultBackup}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-emerald-300 hover:text-white border border-white/12 transition-all cursor-pointer"
+                    title="Export all takes and script drafts to a portable JSON backup file"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear</span>
+                    <Download className="w-3 h-3" />
+                    <span>Backup</span>
                   </button>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() => vaultImportInputRef.current?.click()}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white/[0.06] hover:bg-white/[0.12] text-amber-300 hover:text-white border border-white/12 transition-all cursor-pointer"
+                    title="Restore takes from a VibeCast JSON backup file"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>Restore</span>
+                  </button>
+
+                  {clipHistory.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearHistory}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white/[0.06] hover:bg-rose-500/20 text-white/75 hover:text-rose-200 border border-white/12 transition-all cursor-pointer"
+                      title="Clear local recording vault"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {clipHistory.length === 0 ? (
                 <div className="py-8 text-center text-white/65 space-y-2">
                   <Disc className="w-8 h-8 mx-auto opacity-40" />
-                  <p className="text-xs font-bold-italic text-white/80">No voice takes recorded yet.</p>
+                  <p className="text-xs font-bold-italic text-white/80">Your Audio Vault is ready.</p>
                   <p className="text-[11px] text-white/50">
-                    Synthesize your script to archive studio takes in your session reel.
+                    Every synthesized take is permanently stored in your offline IndexedDB Vault and merges with your Google Cloud account on sign-in.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                   {clipHistory.map((clip) => {
                     const isActive = activeClip?.id === clip.id;
+                    const isHydrating = isHydratingTakeId === clip.id;
                     return (
                       <div
                         key={clip.id}
-                        onClick={() => setActiveClip(clip)}
+                        onClick={() => handleSelectArchiveTake(clip)}
                         className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer ${
                           isActive
                             ? 'bg-[#E14B5A]/25 text-white border-[#FF8A98]/50 shadow-md'
@@ -1198,7 +1550,11 @@ export default function App() {
                                 : 'bg-white/[0.08] text-[#FF8A98]'
                             }`}
                           >
-                            <Play className="w-4 h-4 fill-current ml-0.5" />
+                            {isHydrating ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4 fill-current ml-0.5" />
+                            )}
                           </div>
                           <div className="overflow-hidden">
                             <h5 className="text-xs line-clamp-1 font-bold-italic text-white">

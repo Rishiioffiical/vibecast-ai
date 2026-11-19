@@ -7,6 +7,9 @@ import {
   Zap,
   ShieldCheck,
   Key,
+  Database,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,12 +17,18 @@ interface UserAccountBadgeProps {
   onOpenAuth: () => void;
   onOpenPremium: () => void;
   onOpenAdminKey?: () => void;
+  vaultCount?: number;
+  onExportVault?: () => void;
+  onImportVault?: () => void;
 }
 
 export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
   onOpenAuth,
   onOpenPremium,
   onOpenAdminKey,
+  vaultCount = 0,
+  onExportVault,
+  onImportVault,
 }) => {
   const { user, userProfile, signOut, resetDailyQuotaManually } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
@@ -38,6 +47,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
   }
 
   const userEmail = (user.email || '').trim().toLowerCase();
+  const isGuest = user.uid === 'local-studio-creator';
   const isAdmin = ['rdpandit913@gmail.com', 'dubeyrishi135@gmail.com'].includes(userEmail);
   const charLimit = 2000;
   const remainingChars = Math.max(0, userProfile.credits);
@@ -75,7 +85,7 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
 
       {dropdownOpen && (
         <div
-          className="absolute right-0 mt-2 w-64 spatial-glass border border-white/20 rounded-2xl shadow-2xl p-4 z-50 space-y-3 text-white"
+          className="absolute right-0 mt-2 w-72 spatial-glass border border-white/20 rounded-2xl shadow-2xl p-4 z-50 space-y-3 text-white"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="pb-2.5 border-b border-white/12 space-y-0.5">
@@ -83,9 +93,17 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
               <p className="text-xs font-bold text-white truncate">
                 {userProfile.displayName}
               </p>
-              {isAdmin && (
+              {isAdmin ? (
                 <span className="text-[11px] font-mono-numbers text-amber-300 font-semibold">
                   Admin
+                </span>
+              ) : isGuest ? (
+                <span className="text-[10px] font-mono-numbers text-emerald-300 font-semibold">
+                  Local Vault
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono-numbers text-emerald-300 font-semibold">
+                  Cloud Synced
                 </span>
               )}
             </div>
@@ -93,6 +111,61 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
               {userProfile.email}
             </p>
           </div>
+
+          {/* Zero-Loss Audio Vault Status */}
+          <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-400/25 space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="flex items-center gap-1.5 font-semibold text-emerald-300">
+                <Database className="w-3.5 h-3.5" />
+                <span>Audio Vault Secured</span>
+              </span>
+              <span className="font-mono-numbers font-bold text-white">
+                {vaultCount} Takes
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {onExportVault && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onExportVault();
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-[11px] font-semibold text-white flex items-center justify-center gap-1 border border-white/10 cursor-pointer"
+                >
+                  <Download className="w-3 h-3 text-emerald-300" />
+                  <span>Backup JSON</span>
+                </button>
+              )}
+              {onImportVault && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onImportVault();
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] text-[11px] font-semibold text-white flex items-center justify-center gap-1 border border-white/10 cursor-pointer"
+                >
+                  <Upload className="w-3 h-3 text-amber-300" />
+                  <span>Restore JSON</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isGuest && (
+            <button
+              type="button"
+              onClick={() => {
+                setDropdownOpen(false);
+                onOpenAuth();
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-[#2E4E3B] hover:bg-[#254030] border border-emerald-400/35 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Link Google Account &amp; Cloud Sync</span>
+            </button>
+          )}
 
           {!isAdmin && !userProfile.isPremium ? (
             <div className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-2">
@@ -133,10 +206,10 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="p-2.5 rounded-xl bg-black/35 border border-white/10">
               <span className="text-[10px] uppercase text-white/55 block font-mono-numbers">
-                Takes
+                Saved Takes
               </span>
               <span className="font-mono-numbers font-bold text-xs text-white">
-                {userProfile.totalTakes || 0}
+                {Math.max(vaultCount, userProfile.totalTakes || 0)}
               </span>
             </div>
             <div className="p-2.5 rounded-xl bg-black/35 border border-white/10">
@@ -192,10 +265,11 @@ export const UserAccountBadge: React.FC<UserAccountBadgeProps> = ({
             className="w-full py-2 px-3 rounded-xl hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer border border-white/10"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span>Sign Out (Keep Local Vault)</span>
           </button>
         </div>
       )}
     </div>
   );
 };
+

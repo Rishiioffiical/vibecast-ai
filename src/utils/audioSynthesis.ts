@@ -1,7 +1,8 @@
 /**
- * Speech synthesis utility supporting both Gemini 3.8 Studio TTS and Browser Web Speech API fallback.
+ * Speech synthesis utility supporting both Gemini 3.8 Studio TTS (Solo & 2-Speaker Podcast)
+ * and Browser Web Speech API fallback.
  */
-import { getApiHeaders } from './apiClient';
+import { getAsyncApiHeaders } from './apiClient';
 
 export interface SynthesizeParams {
   text: string;
@@ -11,6 +12,11 @@ export interface SynthesizeParams {
   speed: number;
   language: 'hindi' | 'english';
   scriptMode?: 'hinglish' | 'hindi' | 'english';
+  podcastMode?: boolean;
+  secondVoiceName?: string;
+  secondVoiceLabel?: string;
+  firstSpeakerTag?: string;
+  secondSpeakerTag?: string;
 }
 
 export interface SynthesisResult {
@@ -54,9 +60,10 @@ export function formatTime(seconds: number): string {
  * Call the server-side Gemini TTS API (gemini-3.8-flash-lite-tts model)
  */
 export async function callGeminiTts(params: SynthesizeParams): Promise<SynthesisResult> {
+  const headers = await getAsyncApiHeaders();
   const response = await fetch('/api/tts', {
     method: 'POST',
-    headers: getApiHeaders(),
+    headers,
     body: JSON.stringify(params),
   });
 
@@ -77,7 +84,9 @@ export async function callGeminiTts(params: SynthesizeParams): Promise<Synthesis
     audioUrl,
     blob,
     engine: 'gemini',
-    voiceLabel: `${params.voiceName} (Gemini 3.8 Studio Audio)`,
+    voiceLabel: params.podcastMode
+      ? `${params.voiceName} + ${params.secondVoiceName || 'Kore'} (2-Host Podcast)`
+      : `${params.voiceName} (Gemini 3.8 Studio Audio)`,
   };
 }
 

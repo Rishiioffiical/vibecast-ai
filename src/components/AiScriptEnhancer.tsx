@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Loader2, Wand2, Flame, Feather, BookOpen } from 'lucide-react';
-import { getApiHeaders } from '../utils/apiClient';
+import { getAsyncApiHeaders } from '../utils/apiClient';
 
 interface AiScriptEnhancerProps {
   currentText: string;
@@ -24,9 +24,10 @@ export const AiScriptEnhancer: React.FC<AiScriptEnhancerProps> = ({
     setActiveType(type);
 
     try {
+      const headers = await getAsyncApiHeaders();
       const response = await fetch('/api/ai/enhance', {
         method: 'POST',
-        headers: getApiHeaders(),
+        headers,
         body: JSON.stringify({
           text: currentText,
           type,
